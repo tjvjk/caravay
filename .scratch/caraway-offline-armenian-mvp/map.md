@@ -29,11 +29,11 @@ An implementation-ready MVP specification for `caraway`, validated by an accepta
 - [Define the CLI input and routing contract](issues/06-define-the-cli-input-and-routing-contract.md): accept one local audio file for speech commands and a UTF-8 file or stdin for text translation, use `hye`/`eng` language defaults, validate an explicit composed or fused plan before loading, reserve stdout for results, and distinguish completed, failed, invalid, degraded, and skipped exits.
 - [Define the text and JSONL output contracts](issues/07-define-the-text-and-jsonl-output-contracts.md): default to final-text-only UTF-8 output, offer versioned ordered JSONL segment and summary records for outcomes and metadata, expose source transcripts only when a plan actually produces them, and keep stable codes separate from human diagnostics.
 - [Define configuration and model lifecycle](issues/08-define-configuration-and-model-lifecycle.md): resolve strict TOML configuration from a macOS user file, install one pinned SeamlessM4T snapshot explicitly and atomically into a managed cache, keep working commands offline and MPS-only, and make missing or invalid first-run state fail before model loading.
+- [Set the supported Mac and acceptance boundary](issues/09-set-the-supported-mac-and-acceptance-boundary.md): validate the implementation on the reference M5 Max Mac under Python 3.13 using the fixed 30-segment corpus, human comparison with the accepted Large v2 baseline, deterministic non-fatal outcomes, and explicit latency, memory, and disk limits.
 
 ## Not yet specified
 
-- Concrete performance and quality acceptance thresholds can be sharpened after the representative corpus exists and the first measurements reveal the useful scale.
-- Installation, packaging, and minimum supported Mac constraints depend on the selected runtime path.
+- Installation and packaging remain to be specified for the selected runtime path.
 - The implementation handoff structure may need additional sections once the backend and capability contracts are settled.
 
 ## Out of scope
