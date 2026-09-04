@@ -1,0 +1,371 @@
+{
+  "prototype": "THROWAWAY",
+  "model": "facebook/seamless-m4t-v2-large",
+  "device": "mps",
+  "machine": "macOS-26.6.2-arm64-arm-64bit",
+  "torch": "2.14.0",
+  "load_seconds": 10.706560416001594,
+  "peak_rss_gib": 8.988693237304688,
+  "chunks": [
+    {
+      "start_seconds": 0.0,
+      "duration_seconds": 10.0,
+      "direct_english": "Armin, you'll show me the dead grandmother later, but there's one thing I'm afraid of.",
+      "armenian_asr": "Արմուշը հետո ցույց կտա մահացած տատիկին, բայց մի բան կա, որ վախենալու է տատիկից:",
+      "cascaded_english": "Armus will show the dead grandmother later, but there's something to be afraid of about the grandmother.",
+      "timings_seconds": {
+        "direct": 0.710933374997694,
+        "asr": 0.49624954200407956,
+        "text_translation": 0.45414383299066685
+      }
+    },
+    {
+      "start_seconds": 10.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I'm going to put this part here.",
+      "armenian_asr": "այս մասը կա մի բան կա, որ պահում է, չէ՞, մի քանի մաս կա, էտ էլի կտրում եմ։",
+      "cascaded_english": "There's something holding this part, isn't there, there's a couple of parts, and I'm cutting it again.",
+      "timings_seconds": {
+        "direct": 0.28555600000254344,
+        "asr": 0.49579416601045523,
+        "text_translation": 0.49003837499185465
+      }
+    },
+    {
+      "start_seconds": 20.0,
+      "duration_seconds": 10.0,
+      "direct_english": "And then there's the two-legged frog, and then there's the one-legged frog, and then there's the one-legged frog.",
+      "armenian_asr": "էլի էր երկու հատ էր դառել սենց կախված էր էլի այս տենց էտ էտ է։",
+      "cascaded_english": "There were two more, and it was hanging there. It was hanging there.",
+      "timings_seconds": {
+        "direct": 0.6282555420038989,
+        "asr": 0.4361368750105612,
+        "text_translation": 0.36033904198848177
+      }
+    },
+    {
+      "start_seconds": 30.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I said, \"Where's the fire?\" He said, \"Where's the fire?\" He said, \"Where's the fire?\"",
+      "armenian_asr": "Էս տերտերը ասաց, թե որտեղ է պետք վառել, դրա մասին չխոսեմ, այո, տերտերը ասաց, որ որտեղ է պետք վառել, մի սենյակ է, մի սենյակ է, մի սենյակ է:",
+      "cascaded_english": "Esther said where to burn, let's not talk about that, yes, Esther said where to burn, there's a room, there's a room, there's a room.",
+      "timings_seconds": {
+        "direct": 0.5147781249979744,
+        "asr": 0.8408832920104032,
+        "text_translation": 0.6206154169922229
+      }
+    },
+    {
+      "start_seconds": 40.0,
+      "duration_seconds": 10.0,
+      "direct_english": "He put a lot of coal in it, he put a lot of coal in it, he put a lot of coal in it, he put a lot of coal in it, he put a lot of coal in it, he put a lot of coal in it, he put a lot of coal in it, he put a lot of coal in it, he put a lot of coal in it.",
+      "armenian_asr": "մտավ ածուխը շատ ածուխը շատ լցրեց, շատ լցրեց, մտավ, որ լցրեց, սկսեց աղը լցնել, սկսեց լցնել, հորս արեւը լցրեց:",
+      "cascaded_english": "He went in, he filled a lot of coal, he filled a lot of coal, he went in, he filled, he started filling the salt, he started filling, my father's sun filled.",
+      "timings_seconds": {
+        "direct": 1.102166832992225,
+        "asr": 0.7498000000050524,
+        "text_translation": 0.7077373749925755
+      }
+    },
+    {
+      "start_seconds": 50.0,
+      "duration_seconds": 10.0,
+      "direct_english": "There's no joker, no one's smoking, no one's smoking, one of my friends is doing this, another Armenian movie.",
+      "armenian_asr": "Ջոգինգ չկա, ոչ ոք ոչ մեկին չի տանում, ոչ ոք չի տանում, ընկերներից մեկը սենց է անում, հայ ֆիլմ էլի, ուսանող:",
+      "cascaded_english": "No jogging, no one takes anyone, no one takes anyone, one of my friends does this, Armenian movie again, student.",
+      "timings_seconds": {
+        "direct": 0.5644382080063224,
+        "asr": 0.5654376249876805,
+        "text_translation": 0.4718957080040127
+      }
+    },
+    {
+      "start_seconds": 60.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I'm going to do this, I'm going to do this, I'm going to do this, I'm going to do this.",
+      "armenian_asr": "արա սենց արա, մեկ էլ տենց է, տենց է, տենց է, մի հատ էլ է գալիս։",
+      "cascaded_english": "Do this, do that, one more, one more, one more, one more.",
+      "timings_seconds": {
+        "direct": 0.5617391249979846,
+        "asr": 0.46982429099443834,
+        "text_translation": 0.35894658300094306
+      }
+    },
+    {
+      "start_seconds": 70.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I'm going to take a look at the weather map.",
+      "armenian_asr": "ես որ ախպեր, ես ախպեր, ես ախպեր, ես ախպեր, ես ախպեր, ես ախպեր, ես ախպեր, ես ախպեր։",
+      "cascaded_english": "I'm the one who's hurting, I'm the one who's hurting, I'm the one who's hurting, I'm the one who's hurting, I'm the one who's hurting.",
+      "timings_seconds": {
+        "direct": 0.30950808300985955,
+        "asr": 0.6439623750047758,
+        "text_translation": 0.809797082998557
+      }
+    },
+    {
+      "start_seconds": 80.0,
+      "duration_seconds": 10.0,
+      "direct_english": "We've been waiting for the sun to come up, so we didn't have to smoke.",
+      "armenian_asr": "հորս արեւը բացեցինք, որ ծխը չտան, որ ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի ծխի",
+      "cascaded_english": "The sun is shining, the smoke is rising, the smoke is rising, the smoke is rising, the smoke is rising, the smoke is rising.",
+      "timings_seconds": {
+        "direct": 0.42433295800583437,
+        "asr": 1.6634808750095544,
+        "text_translation": 0.6464814999926602
+      }
+    },
+    {
+      "start_seconds": 90.0,
+      "duration_seconds": 10.0,
+      "direct_english": "He was looking at me, he was flying, and I was like, \"Oh, my God, my God, my God, my God\".",
+      "armenian_asr": "նայի մեծանում էր, թռչում էր, ու Վահագն էր լինում։",
+      "cascaded_english": "He was growing up, he was flying, and he was a vagrant.",
+      "timings_seconds": {
+        "direct": 0.5122579590097303,
+        "asr": 0.3505744580033934,
+        "text_translation": 0.3227065420069266
+      }
+    },
+    {
+      "start_seconds": 100.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I don't know what it was, but it was something out there, and it wasn't a table, it was a table, and it was a table, and it was a table, and it was a table, and it was a table.",
+      "armenian_asr": "Ա՜խ, մի քիչ դուրս եկավ, որ դուրս եկավ, որ ինչ-որ բան չկար, որ սեղան էր դնում, որ սեղան էր դնում, որ սեղան էր դնում, որ մի քիչ շենքեր էին դնում, որ մի քիչ շենքեր էին դնում:",
+      "cascaded_english": "Oh, it turned out a little bit, it turned out that there was something that was putting a table, that was putting a table, that was putting a table, that was putting some buildings, that was putting some buildings.",
+      "timings_seconds": {
+        "direct": 0.7840143329958664,
+        "asr": 0.9106319590064231,
+        "text_translation": 0.7478990840027109
+      }
+    },
+    {
+      "start_seconds": 110.0,
+      "duration_seconds": 10.0,
+      "direct_english": "Dear viewers, I'm looking at the same thing, we've put one thing on the shelf, we've put one thing on the shelf, we've put one thing on the shelf, we've put one thing on the shelf, we've put one thing on the shelf, we've put one thing on the shelf.",
+      "armenian_asr": "սիրելի հանդիսատես, նայեք, մի բան էլ է, մի բան էլ է, մենք դրել ենք, մի բան էլ է, ժողովուրդը իջել է, իջել է գոնոմիկներով։",
+      "cascaded_english": "Dear audience, look, there's one more thing, there's one more thing, we've put, there's one more thing, the people have come down, they've come down with the gnomes.",
+      "timings_seconds": {
+        "direct": 1.1105046659940854,
+        "asr": 0.7045572499919217,
+        "text_translation": 0.7192774590075715
+      }
+    },
+    {
+      "start_seconds": 120.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I stood up, and I saw a man standing in front of our window, and I put a camera in front of him, and I said, \"I've got a camera, I've got a camera, I've got a camera, I've got a camera\".",
+      "armenian_asr": "կանգնեց, կանգնեց, մի աչք ընկավ մեր պատուհանի վրա, մեկ էլ դարձրեցի, տեսախցիկ տվեցի, ասացի՝ երկու բան ա, որ ուզում եմ:",
+      "cascaded_english": "He stopped, he stopped, one eye fell on our window, I put another one up, I gave him a camera, I said, \"There are two things I want\".",
+      "timings_seconds": {
+        "direct": 0.8884799170045881,
+        "asr": 0.6512007499986794,
+        "text_translation": 0.5977380419935798
+      }
+    },
+    {
+      "start_seconds": 130.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I'm going to open the window, I'm going to hang up the phone, I'm going to hang up the phone, I'm going to hang up the phone.",
+      "armenian_asr": "** պատուհանն է բացել, վերեւից կախված է, ասում է:",
+      "cascaded_english": "** The window is open, hanging from the top, says.",
+      "timings_seconds": {
+        "direct": 0.6161246670089895,
+        "asr": 0.35701820900430903,
+        "text_translation": 0.5292502499942202
+      }
+    },
+    {
+      "start_seconds": 140.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I'm going to take a picture and go down there, and now people are going to be ready to take it to the dream, it's not a dream, it's not a limousine, it's not a limousine, it's not a limousine.",
+      "armenian_asr": "նկարը իջնում է ներքեւ, հիմա մարդիկ արդեն պատրաստվում են, որ երազի մեջ տանեն, վախենալը երազ չէ, լիմուզինները էլ չէին, մարդիկ էլ են:",
+      "cascaded_english": "The picture goes down, now people are getting ready to take you to the dream, the fear is not a dream, nor were the limousines, but people are.",
+      "timings_seconds": {
+        "direct": 0.8866312090103747,
+        "asr": 0.6612577920022886,
+        "text_translation": 0.5722863749979297
+      }
+    },
+    {
+      "start_seconds": 150.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I thought we were going to take it out and put it in the dream, and I said, \"Look, it's cute, it's cute, it's cute, it's cute, it's cute, it's cute\".",
+      "armenian_asr": "ասացի, որ արդեն պետք է հանենք, դնենք երազի մեջ, ասեմ՝ նայեք, սիրուն է, նայեք, սիրուն է, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք, նայեք:",
+      "cascaded_english": "I said, we've got to take it out, put it in the dream, say, look, it's cute, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look, look.",
+      "timings_seconds": {
+        "direct": 0.8118951250071405,
+        "asr": 1.6540390830050455,
+        "text_translation": 1.6393145829933928
+      }
+    },
+    {
+      "start_seconds": 160.0,
+      "duration_seconds": 10.0,
+      "direct_english": "It was a good shot, but it was a good shot, but it was a good shot, but it was a good shot, but it was a good shot, but it was a good shot, but it was a good shot.",
+      "armenian_asr": "լավ կադրեր էր վերցրել, բայց ավելի լավ է, բայց ավելի լավ է, որ ինձ մենակ ես ասում, ավելի լավ է, որ մենք բյուրական ենք, որ ոչ:",
+      "cascaded_english": "good footage was taken, but better, but better that I'm alone you say, better that we're raw that we're not",
+      "timings_seconds": {
+        "direct": 0.7285562500037486,
+        "asr": 0.6003325420024339,
+        "text_translation": 0.5130979169916827
+      }
+    },
+    {
+      "start_seconds": 170.0,
+      "duration_seconds": 10.0,
+      "direct_english": "They're going to take their village to the Buryat, and they're going to take the Buryat, and that's the part where it was a golden concert, and that's the time.",
+      "armenian_asr": "իրենց գյուղը բյուրական ասենք, որ տանում ենք, բյուրական, ու այդ ժամանակաշրջանում էլ ոսկե աշնանը համերգ էր, ժամանակին համերգ էր:",
+      "cascaded_english": "Their village is Burmese, let's say, that we take, Burmese, and at that time the Golden Autumn was a concert, it used to be a concert.",
+      "timings_seconds": {
+        "direct": 0.7205382499960251,
+        "asr": 0.6697817920066882,
+        "text_translation": 0.6020985829964047
+      }
+    },
+    {
+      "start_seconds": 180.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I'm in the stadium, I'm in the stadium, I'm in the stadium, I'm in the stadium, I'm in the stadium, I'm in the stadium, I'm in the stadium.",
+      "armenian_asr": "ստադիոնում, ստադիոնում, մի բան, մի բան, մի բան, երազում ես, ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե ոսկե",
+      "cascaded_english": "The Golden Gate Bridge, the Golden Gate Bridge, the Golden Gate Bridge, the Golden Gate Bridge, the Golden Gate Bridge, the Golden Gate Bridge, the Golden Gate Bridge, the Golden Gate Bridge, the Golden Gate Bridge, the Golden Gate Bridge, the Golden Gate Bridge, the Golden Gate Bridge, the Golden Gate Bridge, the Golden Gate Bridge.",
+      "timings_seconds": {
+        "direct": 0.7359709169977577,
+        "asr": 3.0561940829938976,
+        "text_translation": 1.0156832500069868
+      }
+    },
+    {
+      "start_seconds": 190.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I'm going to steal a picture of a cat.",
+      "armenian_asr": "կատուն նկարն ա գողանում ա, որ օգնի, օգնի հորս։",
+      "cascaded_english": "The cat steals the picture to help my father.",
+      "timings_seconds": {
+        "direct": 0.323964374998468,
+        "asr": 0.37321816699113697,
+        "text_translation": 0.26655183400725946
+      }
+    },
+    {
+      "start_seconds": 200.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I'm going to take a look at it.",
+      "armenian_asr": "** տատիկս մի քիչ նահանջել է էլի։",
+      "cascaded_english": "** My grandmother has gone a little further.",
+      "timings_seconds": {
+        "direct": 0.28398800001014024,
+        "asr": 0.3265580000006594,
+        "text_translation": 0.26272441699984483
+      }
+    },
+    {
+      "start_seconds": 210.0,
+      "duration_seconds": 10.0,
+      "direct_english": "And he was telling me that he was looking at the moon, and I was like, \"Oh, my God, I'm going to die\".",
+      "armenian_asr": "ու ինձ էլ էր ասում, որ Լուսինին մի նայեք, գել էր դառնում, գել էր դառնում, գել էր դառնում, գել էր դառնում, գել էր դառնում, գել էր դառնում, գել էր դառնում, գել էր դառնում, գել էր դառնում, գել էր դառնում։",
+      "cascaded_english": "And he would say to me, \"Don't look at Lucy, she was getting hot, she was getting hot, she was getting hot, she was getting hot, she was getting hot, she was getting hot, she was getting hot, she was getting hot\".",
+      "timings_seconds": {
+        "direct": 0.5249242920108372,
+        "asr": 0.9325987090123817,
+        "text_translation": 0.8000851670076372
+      }
+    },
+    {
+      "start_seconds": 220.0,
+      "duration_seconds": 10.0,
+      "direct_english": "It was because I didn't know the reason, and it made me more afraid to look at it.",
+      "armenian_asr": "էն պատճառը, որ պատճառը, որ չգիտեմ, պատճառը չգիտեմ, որ պատճառը չէր ասում, ու դրա պատճառով ավելի վախեցած էր դառնում, որ նայում էր, տեսնո՞ւմ էր:",
+      "cascaded_english": "It's the reason, the reason that I don't know, the reason that I don't know, the reason that he didn't say, and that made him more afraid that he was looking, seeing.",
+      "timings_seconds": {
+        "direct": 0.4225324169965461,
+        "asr": 0.6496459169866284,
+        "text_translation": 0.6851564579992555
+      }
+    },
+    {
+      "start_seconds": 230.0,
+      "duration_seconds": 10.0,
+      "direct_english": "He said, \"Look at the moon\", he said, \"What's that?\" He said, \"Demi, Demi, Demi, Demi, Demi\".",
+      "armenian_asr": "ասում էր Լուսինին մի բան ասի, ասում էր ինչ ասում էր Դեմի, Դեմի, Դեմի ու հետո։",
+      "cascaded_english": "He would tell Lucy to say something, he would say what he was saying to Demi, Demi, Demi and then.",
+      "timings_seconds": {
+        "direct": 0.6141662079899106,
+        "asr": 0.5028497080056695,
+        "text_translation": 0.47113462499692105
+      }
+    },
+    {
+      "start_seconds": 240.0,
+      "duration_seconds": 10.0,
+      "direct_english": "Don't look at the shadows, don't look at the shadows, don't look at the shadows, don't look at the shadows, don't look at the shadows.",
+      "armenian_asr": "** մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա, մինա",
+      "cascaded_english": "Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Minah, Min",
+      "timings_seconds": {
+        "direct": 0.6953004579991102,
+        "asr": 3.312010249996092,
+        "text_translation": 3.215163125001709
+      }
+    },
+    {
+      "start_seconds": 250.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I've been shaped like this, and I'm still shaped like this, and I'm still shaped like this, so what's the point of being shaped like this?",
+      "armenian_asr": "ես էլ եմ ձեւավորվել, էլի սնահավատ եմ, եւ մինչեւ հիմա մնացել է, այսինքն՝ ինչ կա սնահավատության մեջ, ետեւից նետել:",
+      "cascaded_english": "I'm also shaped, I'm still superstitious, and I'm still left with, I mean, what's in superstition, to throw away.",
+      "timings_seconds": {
+        "direct": 0.703048374998616,
+        "asr": 0.6691761250112904,
+        "text_translation": 0.6242960829986259
+      }
+    },
+    {
+      "start_seconds": 260.0,
+      "duration_seconds": 10.0,
+      "direct_english": "There's still a lot of stuff going on. I'm counting down the nights.",
+      "armenian_asr": "կա մինչեւ հիմա հա լավն ա, հա ես հլը ավելացնում եմ գիշերը ավելացնում եմ տունը, հա չէ, չէ, չէ, չէ։",
+      "cascaded_english": "There's still a good one, yeah, I'm adding the hole, I'm adding the house at night, yeah, no, no, no.",
+      "timings_seconds": {
+        "direct": 0.40609208299429156,
+        "asr": 0.5405357919953531,
+        "text_translation": 0.5812489160016412
+      }
+    },
+    {
+      "start_seconds": 270.0,
+      "duration_seconds": 10.0,
+      "direct_english": "We don't take it, we don't take it, we don't cut the salt at night, we don't throw salt at all.",
+      "armenian_asr": "մենք չենք վերցնում, ես թեմայի մեջ չեմ, մենք չենք կտրում, գիշերը, աղը թափելով, ընդհանրապես չենք թափում:",
+      "cascaded_english": "We don't take it, I'm not on the subject, we don't cut it, at night, spilling salt, we don't spill it at all.",
+      "timings_seconds": {
+        "direct": 0.5596054999914486,
+        "asr": 0.5304927090037381,
+        "text_translation": 0.6078132919938071
+      }
+    },
+    {
+      "start_seconds": 280.0,
+      "duration_seconds": 10.0,
+      "direct_english": "I didn't know, for example, that you can't cut the night, but I've never cut the night in my life.",
+      "armenian_asr": "Ես, օրինակ, չգիտեի, որ գիշերը չի կարելի կտրել, բայց կյանքում չեմ կտրել գիշերը, մի փորձեք, չանեք, չանեք, չանեք, չանեք, չանեք, չանեք, չանեք, չանեք, չանեք, չանեք, չանեք, չանեք, չանեք:",
+      "cascaded_english": "I, for example, didn't know that you can't cut the night, but I've never cut the night, don't try, don't do, don't do, don't do, don't do, don't do, don't do, don't do, don't do, don't do, don't do, don't do, don't do, don't do, don't do, don't do, don't do, what are you doing?",
+      "timings_seconds": {
+        "direct": 0.527877708998858,
+        "asr": 1.1046958330116468,
+        "text_translation": 1.561944749992108
+      }
+    },
+    {
+      "start_seconds": 290.0,
+      "duration_seconds": 10.0,
+      "direct_english": "Now there are situations like this, they've grown up, but #err is still left behind.",
+      "armenian_asr": "հիմա տենց իրավիճակներ կան, մեծացել են, բայց #err ջոկելը մնացել է էլի ետեւում:",
+      "cascaded_english": "Now there are situations like that, they've grown, but #err cutting is still behind.",
+      "timings_seconds": {
+        "direct": 0.41506545900483616,
+        "asr": 0.4521555000101216,
+        "text_translation": 0.3808375419903314
+      }
+    }
+  ]
+}

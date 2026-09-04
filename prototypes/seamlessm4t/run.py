@@ -17,10 +17,13 @@ from transformers import (
     AutoProcessor,
     SeamlessM4TForSpeechToText,
     SeamlessM4TForTextToText,
+    SeamlessM4Tv2ForSpeechToText,
+    SeamlessM4Tv2ForTextToText,
 )
 
 
 MODEL_ID = "facebook/hf-seamless-m4t-medium"
+V2_MODEL_ID = "facebook/seamless-m4t-v2-large"
 SAMPLE_RATE = 16_000
 
 
@@ -54,6 +57,7 @@ def main() -> None:
     parser.add_argument("--duration", type=float, default=20)
     parser.add_argument("--chunk", type=float, default=20)
     parser.add_argument("--device", choices=("mps", "cpu"), default="mps")
+    parser.add_argument("--model", choices=("medium", "v2-large"), default="medium")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -61,14 +65,25 @@ def main() -> None:
     if device.type == "mps" and not torch.backends.mps.is_available():
         raise SystemExit("MPS is not available")
     dtype = torch.float16 if device.type == "mps" else torch.float32
+    model_id = MODEL_ID if args.model == "medium" else V2_MODEL_ID
+    speech_class = (
+        SeamlessM4TForSpeechToText
+        if args.model == "medium"
+        else SeamlessM4Tv2ForSpeechToText
+    )
+    text_class = (
+        SeamlessM4TForTextToText
+        if args.model == "medium"
+        else SeamlessM4Tv2ForTextToText
+    )
 
     load_started = time.perf_counter()
-    processor = AutoProcessor.from_pretrained(MODEL_ID)
-    speech_model = SeamlessM4TForSpeechToText.from_pretrained(
-        MODEL_ID, dtype=dtype
+    processor = AutoProcessor.from_pretrained(model_id)
+    speech_model = speech_class.from_pretrained(
+        model_id, dtype=dtype
     ).to(device).eval()
-    text_model = SeamlessM4TForTextToText.from_pretrained(
-        MODEL_ID, dtype=dtype
+    text_model = text_class.from_pretrained(
+        model_id, dtype=dtype
     ).to(device).eval()
     load_seconds = time.perf_counter() - load_started
 
@@ -115,7 +130,7 @@ def main() -> None:
 
     result = {
         "prototype": "THROWAWAY",
-        "model": MODEL_ID,
+        "model": model_id,
         "device": args.device,
         "machine": platform.platform(),
         "torch": torch.__version__,

@@ -15,3 +15,7 @@ The disposable virtual environment lives at the repository root as `.venv`
 and is ignored by Git. The executable prototype lives here, outside the issue
 tracker. The script records direct speech-to-English, Armenian ASR followed by
 text-to-English, per-stage timings, and peak process memory.
+
+Pass `--model v2-large` to test `facebook/seamless-m4t-v2-large` using the
+corresponding task-specific v2 classes. Its two safetensor shards total about
+9.2 GB.

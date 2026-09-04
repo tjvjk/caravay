@@ -21,7 +21,7 @@ An implementation-ready MVP specification for `caraway`, validated by an accepta
 
 - [Establish the viable Armenian model routes](issues/01-establish-viable-armenian-model-routes.md): SeamlessM4T Medium is the first one-model candidate; its real Armenian quality and Apple-Silicon performance remain to be prototyped.
 - [Assemble a representative Eastern Armenian corpus](issues/02-assemble-representative-eastern-armenian-corpus.md): start the acceptance prototype with one five-minute conversational Eastern Armenian excerpt and expand the corpus only if the first results are inconclusive.
-- [Prototype SeamlessM4T on the reference Mac](issues/03-prototype-seamlessm4t-on-the-reference-mac.md): task-specific Transformers models run reliably and faster than real time on MPS, but direct translation is poor and the stronger ASR-then-translation route still misses the MVP quality bar.
+- [Prototype SeamlessM4T on the reference Mac](issues/03-prototype-seamlessm4t-on-the-reference-mac.md): Medium and Large v2 task-specific Transformers models run reliably and faster than real time on MPS. Large v2 improves some Armenian segments but still repeats on difficult chunks, so model/route acceptance requires human review.
 
 ## Not yet specified
 
