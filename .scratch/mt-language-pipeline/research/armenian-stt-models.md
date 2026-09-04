@@ -102,3 +102,10 @@ repetition both with and without previous-window text conditioning. The local
 result rejects generic Turbo for this corpus and raises the priority of the
 Armenian Whisper fine-tune; it does not establish the quality of generic Large
 v3. See [`whisper-prototype-results.md`](../../caraway-offline-armenian-mvp/whisper-prototype-results.md).
+
+The recommended Armenian fine-tune was also tested. It produced Armenian-only,
+often recognizable text, but repeated a token four or more consecutive times
+on 8 of 30 chunks, ran at 0.438 RTF, and used 4.67 GiB peak RSS. Together with
+its missing license, this makes it a useful comparison source rather than the
+current MVP choice. Seamless Large v2's ASR ran at 0.085 RTF and triggered the
+same simple repetition detector on 6 of 30 chunks.
