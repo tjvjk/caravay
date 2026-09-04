@@ -20,6 +20,7 @@ An implementation-ready MVP specification for `caraway`, validated by an accepta
 ## Decisions so far
 
 - [Establish the viable Armenian model routes](issues/01-establish-viable-armenian-model-routes.md): SeamlessM4T Medium is the first one-model candidate; its real Armenian quality and Apple-Silicon performance remain to be prototyped.
+- [Assemble a representative Eastern Armenian corpus](issues/02-assemble-representative-eastern-armenian-corpus.md): start the acceptance prototype with one five-minute conversational Eastern Armenian excerpt and expand the corpus only if the first results are inconclusive.
 
 ## Not yet specified
 
@@ -34,4 +35,3 @@ An implementation-ready MVP specification for `caraway`, validated by an accepta
 - Subtitle generation, TTS, and directory-oriented batch processing.
 - A promise that arbitrary Hugging Face models or multiple production backends work in the MVP.
 - Windows, Linux, cloud inference, and offline use before the initial model download completes.
-
