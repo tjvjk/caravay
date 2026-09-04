@@ -92,3 +92,13 @@ Model-card WER values above are **not directly comparable**: they use different 
 ## Bottom line
 
 For an open, distributable Mac MVP, generic MIT-licensed Whisper currently has the cleanest product path even if it does not win raw Armenian WER. For a research-quality benchmark, the Armenian Whisper Medium fine-tune and Eastern Armenian NeMo Conformer are the two highest-value additions. The next decision should be based on one controlled local bake-off, not cross-card WER.
+
+## Local follow-up
+
+Generic `whisper-large-v3-turbo` was subsequently tested through MLX on the
+project's five-minute Eastern Armenian corpus. It ran at 0.146 RTF with 1.76
+GiB peak RSS, but produced unusable mixed-script hallucinations and extensive
+repetition both with and without previous-window text conditioning. The local
+result rejects generic Turbo for this corpus and raises the priority of the
+Armenian Whisper fine-tune; it does not establish the quality of generic Large
+v3. See [`whisper-prototype-results.md`](../../caraway-offline-armenian-mvp/whisper-prototype-results.md).
