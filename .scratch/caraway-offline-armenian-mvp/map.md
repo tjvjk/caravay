@@ -27,6 +27,7 @@ An implementation-ready MVP specification for `caraway`, validated by an accepta
 - [Choose the MVP model route](issues/04-choose-the-mvp-model-route.md): require SeamlessM4T Large v2 as a composed Source Armenian speech → transcript → English pipeline; accept current repetition as a known limitation, CC-BY-NC-4.0 for non-commercial use, and do not require another fallback comparison.
 - [Define backend capabilities and pipeline semantics](issues/05-define-backend-capabilities-and-pipeline-semantics.md): describe backends by language-qualified operations, bind them in explicit prevalidated execution plans without implicit fallback, preserve declared transcript boundaries, and continue past repeated generation through degraded or skipped segment outcomes.
 - [Define the CLI input and routing contract](issues/06-define-the-cli-input-and-routing-contract.md): accept one local audio file for speech commands and a UTF-8 file or stdin for text translation, use `hye`/`eng` language defaults, validate an explicit composed or fused plan before loading, reserve stdout for results, and distinguish completed, failed, invalid, degraded, and skipped exits.
+- [Define the text and JSONL output contracts](issues/07-define-the-text-and-jsonl-output-contracts.md): default to final-text-only UTF-8 output, offer versioned ordered JSONL segment and summary records for outcomes and metadata, expose source transcripts only when a plan actually produces them, and keep stable codes separate from human diagnostics.
 
 ## Not yet specified
 
