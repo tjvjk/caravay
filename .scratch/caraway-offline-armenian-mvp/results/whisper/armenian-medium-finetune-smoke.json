@@ -1,0 +1,17 @@
+{
+  "prototype": "THROWAWAY",
+  "model": "ArthurYeghinyan/whisper-hy-am-asr-v2",
+  "runtime": "Transformers/PyTorch MPS FP16",
+  "machine": "macOS-26.6.2-arm64-arm-64bit",
+  "torch": "2.14.0",
+  "load_seconds": 107.56877237500157,
+  "peak_rss_gib": 7.058837890625,
+  "chunks": [
+    {
+      "start_seconds": 0.0,
+      "duration_seconds": 10,
+      "text": "Արմուսից հետո ցուց գտաս, մահացած տատի, հա՞ց է. Փարա, բայց կա, խնդանի դեմ կե մենք բար կար, վագենալու տատուսար",
+      "inference_seconds": 5.935162040987052
+    }
+  ]
+}
