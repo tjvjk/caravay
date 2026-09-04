@@ -1,0 +1,23 @@
+{
+  "prototype": "THROWAWAY",
+  "model": "facebook/hf-seamless-m4t-medium",
+  "device": "mps",
+  "machine": "macOS-26.6.2-arm64-arm-64bit",
+  "torch": "2.14.0",
+  "load_seconds": 10.548282417003065,
+  "peak_rss_gib": 5.501556396484375,
+  "chunks": [
+    {
+      "start_seconds": 0.0,
+      "duration_seconds": 20,
+      "direct_english": "I'm going to take a look at this part of the body, and I'm going to take a look at this part of the body, and I'm going to take a look at this part of the body, and I'm going to take a look at this part of the body.",
+      "armenian_asr": "Արմուշի հետ ցույց կտաս մահացած տատի, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա, հա",
+      "cascaded_english": "You're going to show Armus the dead grandmother, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, ha, what are you doing?",
+      "timings_seconds": {
+        "direct": 2.921757333999267,
+        "asr": 2.042981583988876,
+        "text_translation": 0.9665290830016602
+      }
+    }
+  ]
+}
