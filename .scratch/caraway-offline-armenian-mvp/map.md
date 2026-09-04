@@ -28,11 +28,12 @@ An implementation-ready MVP specification for `caraway`, validated by an accepta
 - [Define backend capabilities and pipeline semantics](issues/05-define-backend-capabilities-and-pipeline-semantics.md): describe backends by language-qualified operations, bind them in explicit prevalidated execution plans without implicit fallback, preserve declared transcript boundaries, and continue past repeated generation through degraded or skipped segment outcomes.
 - [Define the CLI input and routing contract](issues/06-define-the-cli-input-and-routing-contract.md): accept one local audio file for speech commands and a UTF-8 file or stdin for text translation, use `hye`/`eng` language defaults, validate an explicit composed or fused plan before loading, reserve stdout for results, and distinguish completed, failed, invalid, degraded, and skipped exits.
 - [Define the text and JSONL output contracts](issues/07-define-the-text-and-jsonl-output-contracts.md): default to final-text-only UTF-8 output, offer versioned ordered JSONL segment and summary records for outcomes and metadata, expose source transcripts only when a plan actually produces them, and keep stable codes separate from human diagnostics.
+- [Define configuration and model lifecycle](issues/08-define-configuration-and-model-lifecycle.md): resolve strict TOML configuration from a macOS user file, install one pinned SeamlessM4T snapshot explicitly and atomically into a managed cache, keep working commands offline and MPS-only, and make missing or invalid first-run state fail before model loading.
 
 ## Not yet specified
 
 - Concrete performance and quality acceptance thresholds can be sharpened after the representative corpus exists and the first measurements reveal the useful scale.
-- Installation, packaging, model-cache lifecycle, and minimum supported Mac constraints depend on the selected runtime path.
+- Installation, packaging, and minimum supported Mac constraints depend on the selected runtime path.
 - The implementation handoff structure may need additional sections once the backend and capability contracts are settled.
 
 ## Out of scope
