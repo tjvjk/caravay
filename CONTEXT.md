@@ -1,6 +1,6 @@
 # Local Language Pipeline
 
-This context describes `mt`, a local CLI for transforming spoken or written language through composable processing stages.
+This context describes `caraway`, a local CLI for transforming spoken or written language through composable processing stages.
 
 ## Language
 
