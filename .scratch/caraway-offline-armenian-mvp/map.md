@@ -24,6 +24,7 @@ An implementation-ready MVP specification for `caraway`, validated by an accepta
 - [Prototype SeamlessM4T on the reference Mac](issues/03-prototype-seamlessm4t-on-the-reference-mac.md): Medium and Large v2 task-specific Transformers models run reliably and faster than real time on MPS. Large v2 improves some Armenian segments but still repeats on difficult chunks, so model/route acceptance requires human review.
 - [Test generic Whisper Large v3 Turbo](whisper-prototype-results.md): MLX is operationally excellent (0.146 RTF, 1.76 GiB peak RSS), but Turbo's Eastern Armenian transcript is unusable due to mixed-script hallucinations and repetition; an Armenian fine-tune remains a separate candidate.
 - [Test Armenian Whisper Medium fine-tune](whisper-prototype-results.md#armenian-medium-fine-tune-follow-up): Armenian-specific tuning restores recognizable Armenian output, but 8/30 chunks loop, ASR is slower than Seamless Large v2, and the checkpoint has no declared license.
+- [Choose the MVP model route](issues/04-choose-the-mvp-model-route.md): require SeamlessM4T Large v2 as a composed Source Armenian speech → transcript → English pipeline; accept current repetition as a known limitation, CC-BY-NC-4.0 for non-commercial use, and do not require another fallback comparison.
 
 ## Not yet specified
 
