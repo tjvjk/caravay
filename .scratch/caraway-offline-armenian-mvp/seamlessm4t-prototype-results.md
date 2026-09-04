@@ -56,3 +56,35 @@ rescue SeamlessM4T Medium's quality: task 04 should compare or reject the model
 route rather than adopt direct speech translation as the MVP default.
 
 Raw primary-source outputs are in `results/seamlessm4t/`.
+
+## Large v2 follow-up
+
+`facebook/seamless-m4t-v2-large` revision
+`5f8cc790b19fc3f67a61c105133b20b34e3dcb76` was subsequently run through the
+same 300-second corpus, ten-second chunking, MPS/FP16 runtime, and both logical
+routes. Transformers 5.16.1 exposes matching task-specific
+`SeamlessM4Tv2ForSpeechToText` and `SeamlessM4Tv2ForTextToText` classes.
+
+| Model | Direct RTF | ASR + translation RTF | Peak RSS | Local model cache |
+| --- | ---: | ---: | ---: | ---: |
+| Medium v1 | 0.031 | 0.081 | 6.28 GiB | 9.0 GiB* |
+| Large v2 | 0.061 | 0.157 | 8.99 GiB | 8.6 GiB |
+
+\*The Medium Hub cache contains both the checkpoint and Hub/Xet cache material;
+the published checkpoint file itself is about 4.8 GB.
+
+Large v2 completed all 30 chunks without a runtime failure. Excluding the first
+download, model loading took 10.71 seconds. It is therefore viable on the
+reference 36 GB Mac, but approximately twice as slow as Medium for both routes.
+
+The first smoke segment improved substantially: direct output became “Armin,
+you'll show me the dead grandmother later, but there's one thing I'm afraid
+of,” and the Armenian ASR no longer collapsed into laughter-token repetition.
+Across the full excerpt, however, Large v2 still repeats phrases or tokens on
+difficult chunks. Examples include coal at 40–50 seconds, Armenian `ծխի` at
+80–90 seconds, `ոսկե` at 180–190 seconds, and `մինա` at 240–250 seconds.
+
+The follow-up verdict is that Large v2 is a materially stronger candidate for
+human review, not an automatic acceptance. Runtime is reliable and comfortably
+faster than real time, but the remaining repetition and recognition errors mean
+that a native Armenian rating is still required before task 04 chooses it.

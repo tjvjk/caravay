@@ -1,0 +1,23 @@
+{
+  "prototype": "THROWAWAY",
+  "model": "facebook/seamless-m4t-v2-large",
+  "device": "mps",
+  "machine": "macOS-26.6.2-arm64-arm-64bit",
+  "torch": "2.14.0",
+  "load_seconds": 168.6659519579989,
+  "peak_rss_gib": 8.830978393554688,
+  "chunks": [
+    {
+      "start_seconds": 0.0,
+      "duration_seconds": 10.0,
+      "direct_english": "Armin, you'll show me the dead grandmother later, but there's one thing I'm afraid of.",
+      "armenian_asr": "Արմուշը հետո ցույց կտա մահացած տատիկին, բայց մի բան կա, որ վախենալու է տատիկից:",
+      "cascaded_english": "Armus will show the dead grandmother later, but there's something to be afraid of about the grandmother.",
+      "timings_seconds": {
+        "direct": 1.1748495000065304,
+        "asr": 0.49289300000236835,
+        "text_translation": 0.5984266250015935
+      }
+    }
+  ]
+}

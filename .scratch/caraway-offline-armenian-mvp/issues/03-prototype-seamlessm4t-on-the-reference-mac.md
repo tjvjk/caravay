@@ -30,3 +30,13 @@ Medium candidate when choosing whether to compare or reject the model route.
 The executable spike is in [`prototypes/seamlessm4t/`](../../../prototypes/seamlessm4t/).
 Full setup, measurements, examples, and raw outputs are in
 [`seamlessm4t-prototype-results.md`](../seamlessm4t-prototype-results.md).
+
+### Large v2 follow-up
+
+SeamlessM4T Large v2 also completed all 30 MPS/FP16 chunks without a runtime
+failure. It used 8.99 GiB peak RSS and ran direct translation at 0.061 RTF and
+the cascade at 0.157 RTF—about twice the time of Medium, but still comfortably
+faster than real time. It produced clearly better text on some segments,
+including the initial smoke segment, while retaining serious repetition on
+several difficult chunks. Treat Large v2 as the stronger Seamless candidate
+for human quality review, not as accepted without that review.
