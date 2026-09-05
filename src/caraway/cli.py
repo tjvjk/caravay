@@ -7,7 +7,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import cast
 
-from caraway import transcription
+from caraway import execution, transcription
 from caraway.models import DownloadError, DownloadLockError, download, inspect
 from caraway.settings import InvalidConfigError, Settings, load
 from caraway.translation import (
@@ -55,6 +55,17 @@ def parser() -> argparse.ArgumentParser:
     speech.add_argument("--format", choices=FORMAT, default="text")
     speech.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
     speech.add_argument("--verbose", action="store_true")
+    composed = commands.add_parser("run")
+    composed.add_argument("audio")
+    composed.add_argument("--source", default="hye")
+    composed.add_argument("--target", default="eng")
+    composed.add_argument("--route", choices=("composed", "fused"))
+    composed.add_argument("--speech-backend")
+    composed.add_argument("--translation-backend")
+    composed.add_argument("--backend")
+    composed.add_argument("--format", choices=FORMAT, default="text")
+    composed.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
+    composed.add_argument("--verbose", action="store_true")
     return result
 
 
@@ -188,6 +199,93 @@ def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
     return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
 
 
+def run(arguments: argparse.Namespace, config: Settings) -> int:
+    """Validate and execute the explicit composed speech-to-English plan."""
+    try:
+        source = language(arguments.source)
+        target = language(arguments.target)
+        audio = transcription.read(arguments.audio)
+        speech, text = execution.plan(
+            arguments.route or "",
+            arguments.backend,
+            arguments.speech_backend,
+            arguments.translation_backend,
+            config.commands.run,
+            source,
+            target,
+        )
+        path = transcription.validate(config.cache_dir, arguments.verbose)
+        segments = transcription.decode(audio)
+    except ValidationError as error:
+        print(error, file=sys.stderr)
+        return 2
+    results: list[execution.Result] = []
+    backend = execution.runtime()
+    try:
+        if not arguments.quiet and sys.stderr.isatty():
+            print("Loading composed models", file=sys.stderr)
+        recognizer = backend.load_speech(path)
+        translator = backend.load(path)
+    except Exception as error:
+        print(f"execution_failed: model loading failed: {error}", file=sys.stderr)
+        problem = execution.Issue(
+            "speech_to_text", "execution_failed", "model loading failed"
+        )
+        execution.fail(
+            sys.stdout,
+            arguments.format,
+            source,
+            target,
+            speech,
+            text,
+            problem,
+        )
+        return 1
+    for index, segment in enumerate(segments):
+        try:
+            recognized = backend.transcribe(recognizer, source, segment)
+        except Exception as error:
+            print(
+                f"transcription_failed: speech transcription failed: {error}",
+                file=sys.stderr,
+            )
+            problem = execution.Issue(
+                "speech_to_text",
+                "transcription_failed",
+                "speech transcription failed",
+            )
+            result = execution.Result("failed", "", "", (problem,))
+        else:
+            try:
+                if not recognized.text:
+                    result = execution.skip(recognized)
+                else:
+                    generated = backend.generate(
+                        translator, source, target, recognized.text
+                    )
+                    result = execution.combine(recognized, backend.resolve(generated))
+            except Exception as error:
+                print(
+                    f"translation_failed: text translation failed: {error}",
+                    file=sys.stderr,
+                )
+                problem = execution.Issue(
+                    "text_to_text", "translation_failed", "text translation failed"
+                )
+                result = execution.Result("failed", "", recognized.text, (problem,))
+        results.append(result)
+        execution.write(sys.stdout, result, index, arguments.format)
+        if result.outcome in ("degraded", "skipped"):
+            for problem in result.issues:
+                print(f"{problem.code}: {problem.message}", file=sys.stderr)
+        if result.outcome == "failed":
+            break
+    values = tuple(results)
+    execution.finish(sys.stdout, values, arguments.format, source, target, speech, text)
+    outcome = execution.aggregate(values)
+    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
+
+
 def main() -> int:
     """Run the Caraway command-line interface."""
     cast(io.TextIOWrapper, sys.stdin).reconfigure(encoding="utf-8", errors="strict")
@@ -211,6 +309,8 @@ def main() -> int:
         return process(arguments, config)
     if arguments.command == "transcribe":
         return transcribe(arguments, config)
+    if arguments.command == "run":
+        return run(arguments, config)
     if arguments.action == "status":
         state = inspect(config.cache_dir)
         print(state)
