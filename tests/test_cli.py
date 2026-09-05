@@ -318,6 +318,8 @@ class SeamlessM4Tv2ForTextToText:
             SeamlessM4Tv2ForTextToText.generated > 0
             and (seconds := os.environ.get("CARAWAY_RUNTIME_DELAY_AFTER_FIRST"))
         ):
+            Path = __import__("pathlib").Path
+            Path(os.environ["CARAWAY_LATER_STARTED"]).touch()
             __import__("time").sleep(float(seconds))
         if os.environ.get("CARAWAY_RUNTIME_FAIL") or os.environ.get(
             "CARAWAY_RUNTIME_FAIL_INDEX"
@@ -419,6 +421,8 @@ def test_transcribe_flushes_each_completed_segment(tmp_path: Path) -> None:
     source = audio(tmp_path)
     additions = speech(tmp_path, ("Առաջին", "Երկրորդ", "Երրորդ"))
     additions["CARAWAY_RUNTIME_DELAY_AFTER_FIRST"] = "1.5"
+    marker = tmp_path / f"հաջորդ-{uuid4()}"
+    additions["CARAWAY_LATER_STARTED"] = str(marker)
     environment = os.environ.copy()
     environment.update(additions)
     environment["HOME"] = str(home)
@@ -426,7 +430,6 @@ def test_transcribe_flushes_each_completed_segment(tmp_path: Path) -> None:
     cache = home / "Library" / "Caches" / "caraway"
     config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
     command = Path(sys.executable).with_name("caraway")
-    started = time.monotonic()
     with subprocess.Popen(
         (command, "--config", str(config), "transcribe", str(source)),
         stdout=subprocess.PIPE,
@@ -436,9 +439,9 @@ def test_transcribe_flushes_each_completed_segment(tmp_path: Path) -> None:
     ) as process:
         assert process.stdout is not None
         line = process.stdout.readline()
-        elapsed = time.monotonic() - started
+        delayed = marker.exists()
         process.communicate(timeout=8)
-    assert (line, elapsed < 1.0) == ("Առաջին\n", True), (
+    assert (line, delayed) == ("Առաջին\n", False), (
         "completed transcription segment remained buffered"
     )
 
