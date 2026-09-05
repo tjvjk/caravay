@@ -1,7 +1,5 @@
 """Test Caraway through its public subprocess interface."""
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

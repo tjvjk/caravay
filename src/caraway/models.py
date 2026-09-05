@@ -1,7 +1,5 @@
 """Inspect Caraway's managed model snapshot."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path, PurePosixPath
 from typing import Final, Literal

@@ -1,7 +1,5 @@
 """Load Caraway's single strict macOS TOML configuration source."""
 
-from __future__ import annotations
-
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
