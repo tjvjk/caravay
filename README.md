@@ -50,3 +50,6 @@ Translate a UTF-8 file or piped text after downloading the model:
 uv run caraway translate armenian.txt
 printf 'Բարեւ' | uv run caraway translate -
 ```
+
+Backend diagnostics are hidden by default; pass `--verbose` after `translate` to
+inspect model-loading details.

@@ -46,6 +46,7 @@ def parser() -> argparse.ArgumentParser:
     translation.add_argument("--backend")
     translation.add_argument("--format", choices=FORMAT, default="text")
     translation.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
+    translation.add_argument("--verbose", action="store_true")
     return result
 
 
@@ -87,7 +88,7 @@ def process(arguments: argparse.Namespace, config: Settings) -> int:
         if not text:
             empty(sys.stdout, arguments.format, source, target, backend)
             return 4
-        path = validate(config.cache_dir)
+        path = validate(config.cache_dir, arguments.verbose)
     except ValidationError as error:
         print(error, file=sys.stderr)
         return 2

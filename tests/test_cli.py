@@ -234,6 +234,21 @@ class inference_mode:
     transformers.joinpath("__init__.py").write_text(
         '''"""Controlled Transformers fixture."""
 import os
+import sys
+
+class Logging:
+    def __init__(self):
+        self.quiet = False
+    def set_verbosity_error(self):
+        self.quiet = True
+    def set_verbosity_warning(self):
+        self.quiet = False
+    def disable_progress_bar(self):
+        self.quiet = True
+    def enable_progress_bar(self):
+        self.quiet = False
+
+logging = Logging()
 
 class Batch(dict):
     def to(self, device):
@@ -248,10 +263,14 @@ class AutoProcessor:
             or os.environ.get("TRANSFORMERS_OFFLINE") != "1"
         ):
             raise RuntimeError("network loading was enabled")
+        if not logging.quiet:
+            print("controlled processor report", file=sys.stderr)
         return cls()
     def __call__(self, *, text, src_lang, return_tensors):
         return Batch(input_text=text, source=src_lang)
-    def decode(self, tokens, *, skip_special_tokens):
+    def decode(self, tokens, *, skip_special_tokens, clean_up_tokenization_spaces):
+        if clean_up_tokenization_spaces is not False:
+            print("controlled BPE warning", file=sys.stderr)
         return os.environ["CARAWAY_OUTPUT"]
 
 class SeamlessM4Tv2ForTextToText:
@@ -259,6 +278,8 @@ class SeamlessM4Tv2ForTextToText:
     def from_pretrained(cls, path, **options):
         if not options.get("local_files_only") or options.get("dtype") != "float16":
             raise RuntimeError("unsafe model loading options")
+        if not logging.quiet:
+            print("controlled model report", file=sys.stderr)
         return cls()
     def to(self, device):
         if device != "mps":
@@ -293,6 +314,23 @@ def test_translate_reads_source_armenian_from_a_file(tmp_path: Path) -> None:
         "Good morning\n",
         "",
     ), "translation did not preserve the CLI output contract"
+
+
+def test_translate_verbose_exposes_backend_diagnostics(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = invoke(
+        home,
+        "translate",
+        "--verbose",
+        "-",
+        additions=runtime(tmp_path),
+        stdin="Բարև",
+    )
+    assert (result.returncode, "controlled model report" in result.stderr) == (
+        0,
+        True,
+    ), "verbose translation hid backend diagnostics"
 
 
 def test_models_status_reports_a_missing_snapshot(tmp_path: Path) -> None:

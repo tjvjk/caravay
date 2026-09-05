@@ -4,13 +4,26 @@ from pathlib import Path
 from typing import Any, cast
 
 import torch
-from transformers import AutoProcessor, SeamlessM4Tv2ForTextToText
+from transformers import AutoProcessor, SeamlessM4Tv2ForTextToText, logging
 
 from caraway.translation import Issue, Result, ValidationError, trim
 
 
-def validate() -> bool:
+def configure(verbose: bool) -> bool:
+    """Select quiet default output or professional backend diagnostics."""
+    logs = cast(Any, logging)
+    if verbose:
+        logs.set_verbosity_warning()
+        logs.enable_progress_bar()
+        return True
+    logs.set_verbosity_error()
+    logs.disable_progress_bar()
+    return True
+
+
+def validate(verbose: bool) -> bool:
     """Require the configured MPS runtime without allowing CPU fallback."""
+    configure(verbose)
     if not torch.backends.mps.is_available():
         raise ValidationError(
             "mps_unavailable: Apple Metal acceleration is unavailable"
@@ -35,7 +48,11 @@ def translate(path: Path, source: str, target: str, text: str) -> Result:
     inputs = processor(text=text, src_lang=source, return_tensors="pt").to("mps")
     with torch.inference_mode():
         tokens = model.generate(**inputs, tgt_lang=target)
-    generated = processor.decode(tokens[0], skip_special_tokens=True).strip()
+    generated = processor.decode(
+        tokens[0],
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False,
+    ).strip()
     output = trim(generated)
     if output != generated:
         issue = Issue(
