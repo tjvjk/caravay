@@ -93,9 +93,12 @@ def process(arguments: argparse.Namespace, config: Settings) -> int:
         print(error, file=sys.stderr)
         return 2
     try:
-        if not arguments.quiet and sys.stderr.isatty():
-            print("Loading translation backend", file=sys.stderr)
+        progress = not arguments.quiet and sys.stderr.isatty()
+        if progress:
+            print("Loading translation model", file=sys.stderr)
         result = translate(path, source, target, text)
+        if progress:
+            print(file=sys.stderr)
     except Exception as error:
         print(f"translation_failed: text translation failed: {error}", file=sys.stderr)
         result = Result(
