@@ -1,5 +1,6 @@
 """Run the heavyweight SeamlessM4T text translation backend."""
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -7,6 +8,14 @@ import torch
 from transformers import AutoProcessor, SeamlessM4Tv2ForTextToText, logging
 
 from caraway.translation import Issue, Result, ValidationError, trim
+
+
+@dataclass(frozen=True)
+class Backend:
+    """Hold the loaded processor and text translation model."""
+
+    processor: Any
+    model: Any
 
 
 def configure(verbose: bool) -> bool:
@@ -31,8 +40,8 @@ def validate(verbose: bool) -> bool:
     return True
 
 
-def translate(path: Path, source: str, target: str, text: str) -> Result:
-    """Translate one text segment offline on MPS with FP16."""
+def load(path: Path) -> Backend:
+    """Load the pinned processor and FP16 text model onto MPS."""
     processors = cast(Any, AutoProcessor)
     models = cast(Any, SeamlessM4Tv2ForTextToText)
     processor = processors.from_pretrained(path, local_files_only=True)
@@ -45,14 +54,26 @@ def translate(path: Path, source: str, target: str, text: str) -> Result:
         .to("mps")
         .eval()
     )
-    inputs = processor(text=text, src_lang=source, return_tensors="pt").to("mps")
+    return Backend(processor, model)
+
+
+def generate(backend: Backend, source: str, target: str, text: str) -> str:
+    """Generate and decode one text translation on MPS."""
+    inputs = backend.processor(text=text, src_lang=source, return_tensors="pt").to(
+        "mps"
+    )
     with torch.inference_mode():
-        tokens = model.generate(**inputs, tgt_lang=target)
-    generated = processor.decode(
+        tokens = backend.model.generate(**inputs, tgt_lang=target)
+    generated = backend.processor.decode(
         tokens[0],
         skip_special_tokens=True,
         clean_up_tokenization_spaces=False,
     ).strip()
+    return cast(str, generated)
+
+
+def resolve(generated: str) -> Result:
+    """Map generated text and repetition damage to a segment outcome."""
     output = trim(generated)
     if output != generated:
         issue = Issue(
@@ -67,3 +88,10 @@ def translate(path: Path, source: str, target: str, text: str) -> Result:
         )
         return Result("skipped", "", (issue,))
     return Result("completed", output, ())
+
+
+def translate(path: Path, source: str, target: str, text: str) -> Result:
+    """Translate one text segment offline on MPS with FP16."""
+    backend = load(path)
+    generated = generate(backend, source, target, text)
+    return resolve(generated)
