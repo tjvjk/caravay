@@ -2,11 +2,10 @@
 
 import json
 from pathlib import Path, PurePosixPath
-from typing import Final, Literal
+from typing import Literal
 
-BACKEND: Final = "seamlessm4t-large-v2"
-REPOSITORY: Final = "facebook/seamless-m4t-v2-large"
-REVISION: Final = "5f8cc790b19fc3f67a61c105133b20b34e3dcb76"
+from caraway.settings import Settings
+
 State = Literal["ready", "missing", "invalid"]
 
 
@@ -77,7 +76,7 @@ def valid(value: object, snapshot: Path) -> bool:
         case {"manifest_version": bool()}:
             return False
         case {
-            "manifest_version": 1,
+            "manifest_version": int() as version,
             "backend": str() as backend,
             "repository": str() as repository,
             "revision": str() as revision,
@@ -90,9 +89,10 @@ def valid(value: object, snapshot: Path) -> bool:
         ):
             paths = tuple(name(item) for item in files)
             return (
-                backend == BACKEND
-                and repository == REPOSITORY
-                and revision == REVISION
+                version == Settings.manifest_version
+                and backend == Settings.backend_name
+                and repository == Settings.repository_name
+                and revision == Settings.revision
                 and bool(files)
                 and all(paths)
                 and len(set(paths)) == len(paths)
@@ -104,12 +104,12 @@ def valid(value: object, snapshot: Path) -> bool:
 
 def inspect(root: Path) -> State:
     """Report the state of the pinned snapshot below a managed cache root."""
-    snapshot = root / BACKEND / REVISION
+    snapshot = root / Settings.backend_name / Settings.revision
     if not snapshot.exists():
         return "missing"
     try:
         document: object = json.loads(
-            (snapshot / "manifest.json").read_text(encoding="utf-8")
+            (snapshot / Settings.manifest_name).read_text(encoding="utf-8")
         )
     except (OSError, UnicodeError, json.JSONDecodeError):
         return "invalid"

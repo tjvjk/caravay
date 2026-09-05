@@ -16,6 +16,7 @@ def invoke(home: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     environment["HOME"] = str(home)
     environment["XDG_CONFIG_HOME"] = str(home / "xdg")
+    environment["CACHE_DIR"] = str(home / f"չթույլատրված-{uuid4()}")
     command = Path(sys.executable).with_name("caraway")
     return subprocess.run(
         (command, *arguments),
