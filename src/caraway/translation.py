@@ -1,11 +1,12 @@
 """Translate Source Armenian text with the pinned managed backend."""
 
+import importlib
 import json
 import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, Literal, TextIO, cast
+from typing import Final, Literal, Protocol, TextIO, cast
 
 from caraway.models import inspect
 from caraway.settings import Settings
@@ -35,6 +36,25 @@ class Result:
 
 class ValidationError(ValueError):
     """Signal that translation cannot safely start."""
+
+
+class Runtime(Protocol):
+    """Describe the lazily imported heavyweight backend module."""
+
+    def validate(self) -> bool:
+        """Require the configured runtime device."""
+        ...
+
+    def translate(self, path: Path, source: str, target: str, text: str) -> Result:
+        """Translate one text segment."""
+        ...
+
+
+def runtime() -> Runtime:
+    """Load the heavyweight backend module only after local validation."""
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    return cast(Runtime, importlib.import_module("caraway.runtime"))
 
 
 def snapshot(root: Path) -> Path:
@@ -71,52 +91,13 @@ def validate(root: Path) -> Path:
         raise ValidationError(
             "model_cache_invalid: installed model snapshot is invalid"
         )
-    import torch
-
-    if not torch.backends.mps.is_available():
-        raise ValidationError(
-            "mps_unavailable: Apple Metal acceleration is unavailable"
-        )
+    runtime().validate()
     return snapshot(root)
 
 
 def translate(path: Path, source: str, target: str, text: str) -> Result:
     """Translate one text segment offline on MPS with FP16."""
-    import torch
-    from transformers import AutoProcessor, SeamlessM4Tv2ForTextToText
-
-    os.environ["HF_HUB_OFFLINE"] = "1"
-    os.environ["TRANSFORMERS_OFFLINE"] = "1"
-    processors = cast(Any, AutoProcessor)
-    models = cast(Any, SeamlessM4Tv2ForTextToText)
-    processor = processors.from_pretrained(path, local_files_only=True)
-    model = (
-        models.from_pretrained(
-            path,
-            local_files_only=True,
-            dtype=torch.float16,
-        )
-        .to("mps")
-        .eval()
-    )
-    inputs = processor(text=text, src_lang=source, return_tensors="pt").to("mps")
-    with torch.inference_mode():
-        tokens = model.generate(**inputs, tgt_lang=target)
-    generated = processor.decode(tokens[0], skip_special_tokens=True).strip()
-    output = trim(generated)
-    if output != generated:
-        issue = Issue(
-            "text_to_text", "repetition", "repeating translation suffix was removed"
-        )
-        if output:
-            return Result("degraded", output, (issue,))
-        return Result("skipped", "", (issue,))
-    if not output:
-        issue = Issue(
-            "text_to_text", "empty_output", "translation produced no useful text"
-        )
-        return Result("skipped", "", (issue,))
-    return Result("completed", output, ())
+    return runtime().translate(path, source, target, text)
 
 
 def trim(text: str) -> str:
