@@ -3,10 +3,30 @@
 import argparse
 import io
 import sys
+from enum import Enum, auto
 from pathlib import Path
+from typing import cast
 
 from caraway.models import DownloadError, DownloadLockError, download, inspect
 from caraway.settings import InvalidConfigError, Settings, load
+from caraway.translation import (
+    FORMAT,
+    Issue,
+    Result,
+    ValidationError,
+    capability,
+    emit,
+    empty,
+    language,
+    translate,
+    validate,
+)
+
+
+class Input(Enum):
+    """Distinguish omitted input from every possible file operand."""
+
+    STDIN = auto()
 
 
 def parser() -> argparse.ArgumentParser:
@@ -19,11 +39,91 @@ def parser() -> argparse.ArgumentParser:
     actions = models.add_subparsers(dest="action", required=True)
     actions.add_parser("status")
     actions.add_parser("download")
+    translation = commands.add_parser("translate")
+    translation.add_argument("text", nargs="?", default=Input.STDIN)
+    translation.add_argument("--source", default="hye")
+    translation.add_argument("--target", default="eng")
+    translation.add_argument("--backend")
+    translation.add_argument("--format", choices=FORMAT, default="text")
+    translation.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
     return result
+
+
+def read(value: str | Input) -> str:
+    """Read one UTF-8 text operand or standard input."""
+    try:
+        if value is Input.STDIN:
+            if sys.stdin.isatty():
+                raise ValidationError(
+                    "invalid_input: interactive stdin requires an operand or -"
+                )
+            return sys.stdin.read()
+        match value:
+            case "-":
+                return sys.stdin.read()
+            case str() as operand:
+                path = Path(operand)
+            case _:
+                raise ValidationError("invalid_input: text operand is invalid")
+        if not path.is_file():
+            raise ValidationError(
+                f"invalid_input: {path} is not a readable regular file"
+            )
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise ValidationError(
+            "invalid_input: input is not readable UTF-8 text"
+        ) from error
+
+
+def process(arguments: argparse.Namespace, config: Settings) -> int:
+    """Validate and execute one offline text translation."""
+    try:
+        source = language(arguments.source)
+        target = language(arguments.target)
+        text = read(arguments.text)
+        backend = arguments.backend or config.commands.translate.backend
+        capability(backend, source, target)
+        if not text:
+            empty(sys.stdout, arguments.format, source, target, backend)
+            return 4
+        path = validate(config.cache_dir)
+    except ValidationError as error:
+        print(error, file=sys.stderr)
+        return 2
+    try:
+        if not arguments.quiet and sys.stderr.isatty():
+            print("Loading translation backend", file=sys.stderr)
+        result = translate(path, source, target, text)
+    except Exception as error:
+        print(f"translation_failed: text translation failed: {error}", file=sys.stderr)
+        result = Result(
+            "failed",
+            "",
+            (
+                Issue(
+                    "text_to_text",
+                    "translation_failed",
+                    "text translation failed",
+                ),
+            ),
+        )
+    if result.outcome in ("degraded", "skipped"):
+        for problem in result.issues:
+            print(f"{problem.code}: {problem.message}", file=sys.stderr)
+    emit(sys.stdout, result, arguments.format, source, target, backend)
+    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[result.outcome]
 
 
 def main() -> int:
     """Run the Caraway command-line interface."""
+    cast(io.TextIOWrapper, sys.stdin).reconfigure(encoding="utf-8", errors="strict")
+    cast(io.TextIOWrapper, sys.stdout).reconfigure(
+        encoding="utf-8", errors="strict", newline="\n"
+    )
+    cast(io.TextIOWrapper, sys.stderr).reconfigure(
+        encoding="utf-8", errors="replace", newline="\n"
+    )
     arguments = parser().parse_args()
     try:
         config = (
@@ -34,6 +134,8 @@ def main() -> int:
     except InvalidConfigError as error:
         print(error, file=sys.stderr)
         return 2
+    if arguments.command == "translate":
+        return process(arguments, config)
     if arguments.action == "status":
         state = inspect(config.cache_dir)
         print(state)
