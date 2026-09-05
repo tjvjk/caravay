@@ -121,47 +121,47 @@ def runtime() -> Runtime:
 
 def plan(
     route: str,
-    fused: str | None,
-    speech: str | None,
-    text: str | None,
+    fused: str,
+    speech: str,
+    text: str,
     configured: Route,
     source: str,
     target: str,
 ) -> tuple[Backend, Backend]:
     """Resolve and validate the complete language-qualified execution plan."""
-    if fused is not None and (speech is not None or text is not None):
+    if fused and (speech or text):
         raise ValidationError("invalid_route: composed and fused bindings conflict")
     selected = route or configured.route
     if selected == "fused":
         match configured:
             case Fused(backend=backend):
-                selected_backend = fused or backend
+                binding = fused or backend
             case Composed():
-                if fused is None:
+                if not fused:
                     raise ValidationError(
                         "invalid_route: fused route requires a backend"
                     )
-                selected_backend = fused
+                binding = fused
         raise ValidationError(
-            f"unsupported_capability: {selected_backend} cannot translate "
+            f"unsupported_capability: {binding} cannot translate "
             f"{source} speech to {target}"
         )
-    if fused is not None:
+    if fused:
         raise ValidationError("invalid_route: fused backend requires the fused route")
-    configured_speech: str
-    configured_text: str
+    recognition: str
+    translator: str
     match configured:
         case Composed(
-            speech_backend=configured_speech,
-            translation_backend=configured_text,
+            speech_backend=recognition,
+            translation_backend=translator,
         ):
             pass
         case Fused():
-            configured_speech = Settings.backend_name
-            configured_text = Settings.backend_name
-    speech_backend = transcription.capability(speech or configured_speech, source)
-    text_backend = translation.capability(text or configured_text, source, target)
-    return speech_backend, text_backend
+            recognition = Settings.backend_name
+            translator = Settings.backend_name
+    recognizer = transcription.capability(speech or recognition, source)
+    translator = translation.capability(text or translator, source, target)
+    return recognizer, translator
 
 
 def issue(stage: Stage, code: str, message: str) -> Issue:

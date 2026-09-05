@@ -460,6 +460,14 @@ def test_run_preserves_transcripts_and_resolved_plan_in_jsonl(
     ("outputs", "status", "outcome", "text", "transcript"),
     (
         (("Բարեւ կրկին կրկին կրկին", "Hello"), 3, "degraded", "Hello", "Բարեւ"),
+        (
+            ("Բարեւ կրկին կրկին կրկին", "Hello again again again"),
+            3,
+            "degraded",
+            "Hello",
+            "Բարեւ",
+        ),
+        (("Բարեւ կրկին կրկին կրկին", ""), 4, "skipped", None, "Բարեւ"),
         (("Բարեւ", "Hello again again again"), 3, "degraded", "Hello", "Բարեւ"),
         (("",), 4, "skipped", None, None),
         (("Բարեւ", ""), 4, "skipped", None, "Բարեւ"),
@@ -572,6 +580,62 @@ def test_run_validates_the_complete_plan_before_model_loading(tmp_path: Path) ->
     assert (result.returncode, result.stdout) == (2, ""), (
         "invalid complete plan reached model loading"
     )
+
+
+@pytest.mark.parametrize(
+    ("arguments", "operand"),
+    (
+        (("--source", "HYE"), "audio"),
+        (("--target", "fra"), "audio"),
+        ((), "-"),
+        ((), "https://օրինակ.test/ձայն.wav"),
+        ((), "folder"),
+    ),
+)
+def test_run_rejects_invalid_input_and_languages_before_loading(
+    tmp_path: Path, arguments: tuple[str, ...], operand: str
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    home.joinpath("folder").mkdir(parents=True)
+    source = str(audio(tmp_path, 1)) if operand == "audio" else operand
+    additions = runtime(tmp_path)
+    additions["CARAWAY_RUNTIME_FAIL"] = "load"
+    result = run(home, *arguments, source, additions=additions)
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "invalid run input or language reached model loading"
+    )
+
+
+def test_run_writes_deterministic_utf8_lf_output_bytes(tmp_path: Path) -> None:
+    outputs = ("Բարի լույս", "Good morning Ա")
+    results = []
+    for _ in range(2):
+        home = tmp_path / f"տուն-{uuid4()}"
+        publish(home)
+        source = audio(tmp_path, 1)
+        additions = speech(tmp_path, outputs)
+        environment = os.environ.copy()
+        environment.update(additions)
+        environment["HOME"] = str(home)
+        config = home / f"կարգավորում-{uuid4()}.toml"
+        cache = home / "Library" / "Caches" / "caraway"
+        config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
+        command = Path(sys.executable).with_name("caraway")
+        results.append(
+            subprocess.run(
+                (command, "--config", str(config), "run", str(source)),
+                capture_output=True,
+                check=False,
+                env=environment,
+                timeout=5,
+            )
+        )
+    assert tuple(
+        (result.returncode, result.stdout, result.stderr) for result in results
+    ) == (
+        (0, "Good morning Ա\n".encode(), b""),
+        (0, "Good morning Ա\n".encode(), b""),
+    ), "fixed composed execution produced nondeterministic output bytes"
 
 
 @pytest.mark.parametrize(

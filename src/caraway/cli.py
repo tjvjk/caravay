@@ -60,9 +60,9 @@ def parser() -> argparse.ArgumentParser:
     composed.add_argument("--source", default="hye")
     composed.add_argument("--target", default="eng")
     composed.add_argument("--route", choices=("composed", "fused"))
-    composed.add_argument("--speech-backend")
-    composed.add_argument("--translation-backend")
-    composed.add_argument("--backend")
+    composed.add_argument("--speech-backend", dest="speech", default="")
+    composed.add_argument("--translation-backend", dest="translation", default="")
+    composed.add_argument("--backend", dest="fused", default="")
     composed.add_argument("--format", choices=FORMAT, default="text")
     composed.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
     composed.add_argument("--verbose", action="store_true")
@@ -207,9 +207,9 @@ def run(arguments: argparse.Namespace, config: Settings) -> int:
         audio = transcription.read(arguments.audio)
         speech, text = execution.plan(
             arguments.route or "",
-            arguments.backend,
-            arguments.speech_backend,
-            arguments.translation_backend,
+            arguments.fused,
+            arguments.speech,
+            arguments.translation,
             config.commands.run,
             source,
             target,
