@@ -79,9 +79,10 @@ wheels = [
 
 [[package]]
 name = "caraway"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "huggingface-hub" },
     { name = "pydantic-settings" },
     { name = "torch" },
     { name = "transformers" },
@@ -99,6 +100,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "huggingface-hub", specifier = ">=1.30,<2" },
     { name = "pydantic-settings", specifier = ">=2.11,<3" },
     { name = "torch", specifier = "==2.14.0" },
     { name = "transformers", specifier = "==5.16.1" },
