@@ -2,6 +2,7 @@
 
 import json
 import os
+import pty
 import subprocess
 import sys
 import time
@@ -16,6 +17,8 @@ def invoke(
     home: Path,
     *arguments: str,
     additions: Mapping[str, str] | None = None,
+    stdin: str = "",
+    network: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Invoke the development command with an isolated home directory."""
     home.mkdir(parents=True, exist_ok=True)
@@ -25,13 +28,25 @@ def invoke(
     environment["CACHE_DIR"] = str(home / f"չթույլատրված-{uuid4()}")
     if additions is not None:
         environment.update(additions)
-    command = Path(sys.executable).with_name("caraway")
+    executable = str(Path(sys.executable).with_name("caraway"))
+    command = (
+        (executable, *arguments)
+        if network
+        else (
+            "/usr/bin/sandbox-exec",
+            "-p",
+            "(version 1)(allow default)(deny network*)",
+            executable,
+            *arguments,
+        )
+    )
     return subprocess.run(
-        (command, *arguments),
+        command,
         check=False,
         capture_output=True,
         cwd=home,
         env=environment,
+        input=stdin,
         text=True,
         timeout=5,
     )
@@ -191,10 +206,471 @@ def publish(home: Path) -> Path:
     return target
 
 
+def runtime(tmp_path: Path, output: str = "Good morning") -> dict[str, str]:
+    """Create deterministic subprocess-visible Torch and Transformers boundaries."""
+    root = tmp_path / f"գործարկում-{uuid4()}"
+    torch = root / "torch"
+    torch.mkdir(parents=True)
+    torch.joinpath("__init__.py").write_text(
+        '''"""Controlled Torch fixture."""
+import os
+from types import SimpleNamespace
+
+float16 = "float16"
+backends = SimpleNamespace(
+    mps=SimpleNamespace(is_available=lambda: os.environ.get("CARAWAY_MPS") == "1")
+)
+
+class inference_mode:
+    def __enter__(self):
+        return self
+    def __exit__(self, kind, value, traceback):
+        return False
+''',
+        encoding="utf-8",
+    )
+    transformers = root / "transformers"
+    transformers.mkdir()
+    transformers.joinpath("__init__.py").write_text(
+        '''"""Controlled Transformers fixture."""
+import os
+import sys
+
+class Logging:
+    def __init__(self):
+        self.quiet = False
+    def set_verbosity_error(self):
+        self.quiet = True
+    def set_verbosity_warning(self):
+        self.quiet = False
+    def disable_progress_bar(self):
+        self.quiet = True
+    def enable_progress_bar(self):
+        self.quiet = False
+
+logging = Logging()
+
+class Batch(dict):
+    def to(self, device):
+        return self
+
+class AutoProcessor:
+    @classmethod
+    def from_pretrained(cls, path, **options):
+        if (
+            not options.get("local_files_only")
+            or os.environ.get("HF_HUB_OFFLINE") != "1"
+            or os.environ.get("TRANSFORMERS_OFFLINE") != "1"
+        ):
+            raise RuntimeError("network loading was enabled")
+        if not logging.quiet:
+            print("controlled processor report", file=sys.stderr)
+        return cls()
+    def __call__(self, *, text, src_lang, return_tensors):
+        return Batch(input_text=text, source=src_lang)
+    def decode(self, tokens, *, skip_special_tokens, clean_up_tokenization_spaces):
+        if clean_up_tokenization_spaces is not False:
+            print("controlled BPE warning", file=sys.stderr)
+        return os.environ["CARAWAY_OUTPUT"]
+
+class SeamlessM4Tv2ForTextToText:
+    @classmethod
+    def from_pretrained(cls, path, **options):
+        if not options.get("local_files_only") or options.get("dtype") != "float16":
+            raise RuntimeError("unsafe model loading options")
+        if not logging.quiet:
+            print("controlled model report", file=sys.stderr)
+        return cls()
+    def to(self, device):
+        if device != "mps":
+            raise RuntimeError("CPU fallback")
+        return self
+    def eval(self):
+        return self
+    def generate(self, **options):
+        if os.environ.get("CARAWAY_RUNTIME_FAIL"):
+            raise RuntimeError("controlled inference failure")
+        if options.get("tgt_lang") != "eng":
+            raise RuntimeError("wrong target")
+        return [[1]]
+''',
+        encoding="utf-8",
+    )
+    return {
+        "PYTHONPATH": str(root),
+        "CARAWAY_MPS": "1",
+        "CARAWAY_OUTPUT": output,
+    }
+
+
+def test_translate_reads_source_armenian_from_a_file(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = tmp_path / f"աղբյուր-{uuid4()}.txt"
+    source.write_text("Բարի լույս", encoding="utf-8")
+    result = invoke(home, "translate", str(source), additions=runtime(tmp_path))
+    assert (result.returncode, result.stdout, result.stderr) == (
+        0,
+        "Good morning\n",
+        "",
+    ), "translation did not preserve the CLI output contract"
+
+
+def test_translate_verbose_exposes_backend_diagnostics(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = invoke(
+        home,
+        "translate",
+        "--verbose",
+        "-",
+        additions=runtime(tmp_path),
+        stdin="Բարև",
+    )
+    assert (result.returncode, "controlled model report" in result.stderr) == (
+        0,
+        True,
+    ), "verbose translation hid backend diagnostics"
+
+
 def test_models_status_reports_a_missing_snapshot(tmp_path: Path) -> None:
     result = invoke(tmp_path / f"տուն-{uuid4()}", "models", "status")
     assert (result.returncode, result.stdout) == (1, "missing\n"), (
         "missing snapshot was not reported exactly"
+    )
+
+
+def test_translate_reads_source_armenian_from_standard_input(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = invoke(
+        home,
+        "translate",
+        "-",
+        additions=runtime(tmp_path, "  Welcome home  "),
+        stdin="Բարի գալուստ",
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (
+        0,
+        "Welcome home\n",
+        "",
+    ), "standard input translation was not edge trimmed"
+
+
+def test_translate_writes_utf8_with_a_physical_lf(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    environment = os.environ.copy()
+    environment.update(runtime(tmp_path, "English Ա"))
+    environment["HOME"] = str(home)
+    command = Path(sys.executable).with_name("caraway")
+    result = subprocess.run(
+        (command, "translate", "-"),
+        input="Բարև".encode(),
+        capture_output=True,
+        check=False,
+        env=environment,
+        timeout=5,
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (
+        0,
+        "English Ա\n".encode(),
+        b"",
+    ), "translation output did not use UTF-8 and one physical LF"
+
+
+def test_translate_succeeds_with_network_access_denied(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = invoke(
+        home,
+        "translate",
+        "-",
+        additions=runtime(tmp_path, "Offline result"),
+        stdin="Անցանց",
+        network=False,
+    )
+    assert (result.returncode, result.stdout) == (0, "Offline result\n"), (
+        "translation required network access"
+    )
+
+
+def test_translate_omitted_operand_reads_noninteractive_input(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = invoke(
+        home,
+        "translate",
+        additions=runtime(tmp_path, "Hello"),
+        stdin="Բարև",
+    )
+    assert (result.returncode, result.stdout) == (0, "Hello\n"), (
+        "omitted operand did not consume redirected input"
+    )
+
+
+def test_translate_rejects_an_invalid_utf8_file_before_model_validation(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    source = tmp_path / f"աղբյուր-{uuid4()}.txt"
+    source.write_bytes(b"\xff")
+    result = invoke(home, "translate", str(source))
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "invalid UTF-8 input reached model validation"
+    )
+
+
+def test_translate_rejects_invalid_utf8_standard_input(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    environment = os.environ.copy()
+    environment["HOME"] = str(home)
+    command = Path(sys.executable).with_name("caraway")
+    result = subprocess.run(
+        (command, "translate", "-"),
+        input=b"\xff",
+        capture_output=True,
+        check=False,
+        env=environment,
+        timeout=5,
+    )
+    assert (result.returncode, result.stdout) == (2, b""), (
+        "invalid UTF-8 standard input caused an operational failure"
+    )
+
+
+def test_translate_omitted_operand_rejects_an_interactive_terminal(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    home.mkdir()
+    environment = os.environ.copy()
+    environment["HOME"] = str(home)
+    command = Path(sys.executable).with_name("caraway")
+    master, slave = pty.openpty()
+    try:
+        with subprocess.Popen(
+            (command, "translate"),
+            stdin=slave,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=environment,
+            text=True,
+        ) as process:
+            stdout, stderr = process.communicate(timeout=5)
+    finally:
+        os.close(master)
+        os.close(slave)
+    assert (process.returncode, stdout, "invalid_input" in stderr) == (2, "", True), (
+        "interactive omission waited for input"
+    )
+
+
+def test_translate_empty_text_skips_without_an_installed_model(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    result = invoke(home, "translate", "-", stdin="")
+    assert (result.returncode, result.stdout) == (4, ""), (
+        "empty translation attempted backend setup"
+    )
+
+
+def test_translate_empty_jsonl_has_only_a_zero_count_summary(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    result = invoke(home, "translate", "--format", "jsonl", "-", stdin="")
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (
+        result.returncode,
+        len(records),
+        records[0]["outcome"],
+        records[0]["segments"],
+    ) == (
+        4,
+        1,
+        "skipped",
+        {"total": 0, "completed": 0, "degraded": 0, "skipped": 0, "failed": 0},
+    ), "empty translation emitted an invalid JSONL summary"
+
+
+@pytest.mark.parametrize("value", ("HY", "hye ", "hyե", "HYE"))
+def test_translate_rejects_malformed_language_codes(tmp_path: Path, value: str) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    result = invoke(home, "translate", "--source", value, "-", stdin="Բարև")
+    assert (result.returncode, result.stdout, "invalid_language" in result.stderr) == (
+        2,
+        "",
+        True,
+    ), "malformed language code was accepted"
+
+
+def test_translate_distinguishes_an_unsupported_capability(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    result = invoke(home, "translate", "--target", "fra", "-", stdin="Բարև")
+    assert (
+        result.returncode,
+        result.stdout,
+        "unsupported_capability" in result.stderr,
+    ) == (
+        2,
+        "",
+        True,
+    ), "unsupported capability was reported as malformed"
+
+
+def test_translate_reports_a_missing_snapshot_before_mps(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    result = invoke(home, "translate", "-", stdin="Բարև")
+    assert (
+        result.returncode,
+        result.stdout,
+        "model_not_installed" in result.stderr,
+    ) == (
+        2,
+        "",
+        True,
+    ), "missing snapshot was not validated first"
+
+
+def test_translate_rejects_an_invalid_snapshot_before_mps(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home).write_text("չվավեր", encoding="utf-8")
+    result = invoke(home, "translate", "-", stdin="Բարև")
+    assert (
+        result.returncode,
+        result.stdout,
+        "model_cache_invalid" in result.stderr,
+    ) == (
+        2,
+        "",
+        True,
+    ), "invalid snapshot reached MPS validation"
+
+
+def test_translate_reports_unavailable_mps_without_loading_transformers(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    additions = runtime(tmp_path)
+    additions["CARAWAY_MPS"] = "0"
+    result = invoke(home, "translate", "-", additions=additions, stdin="Բարև")
+    assert (result.returncode, result.stdout, "mps_unavailable" in result.stderr) == (
+        2,
+        "",
+        True,
+    ), "unavailable MPS reached model loading"
+
+
+def test_translate_emits_schema_version_one_jsonl(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = invoke(
+        home,
+        "translate",
+        "--format",
+        "jsonl",
+        "-",
+        additions=runtime(tmp_path, "Hello, friend"),
+        stdin="Բարև՛ ընկեր",
+    )
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (result.returncode, records) == (
+        0,
+        (
+            {
+                "schema_version": 1,
+                "type": "segment",
+                "index": 0,
+                "outcome": "completed",
+                "text": "Hello, friend",
+                "issues": [],
+            },
+            {
+                "schema_version": 1,
+                "type": "summary",
+                "command": "translate",
+                "outcome": "completed",
+                "source_language": "hye",
+                "target_language": "eng",
+                "backends": {"text_to_text": "seamlessm4t-large-v2"},
+                "segments": {
+                    "total": 1,
+                    "completed": 1,
+                    "degraded": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                },
+            },
+        ),
+    ), "translation emitted the wrong JSONL records"
+
+
+def test_translate_marks_repeating_output_as_degraded(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = invoke(
+        home,
+        "translate",
+        "--format",
+        "jsonl",
+        "-",
+        additions=runtime(tmp_path, "Useful  text loop loop loop"),
+        stdin="Օգտակար տեքստ",
+    )
+    record = json.loads(result.stdout.splitlines()[0])
+    assert (
+        result.returncode,
+        record["outcome"],
+        record["text"],
+        record["issues"][0]["code"],
+    ) == (
+        3,
+        "degraded",
+        "Useful  text",
+        "repetition",
+    ), "repeating suffix was not reported as degraded"
+
+
+def test_translate_serializes_a_processing_failure(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    additions = runtime(tmp_path)
+    additions["CARAWAY_RUNTIME_FAIL"] = "1"
+    result = invoke(
+        home,
+        "translate",
+        "--format",
+        "jsonl",
+        "-",
+        additions=additions,
+        stdin="Սխալ",
+    )
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (
+        result.returncode,
+        records[0]["outcome"],
+        records[1]["outcome"],
+        records[1]["error"],
+    ) == (1, "failed", "failed", records[0]["issues"][0]), (
+        "processing failure lacked matching segment and summary issues"
+    )
+
+
+@pytest.mark.skipif(
+    "CARAWAY_REAL_MODEL_CONFIG" not in os.environ,
+    reason="real model smoke test is opt-in",
+)
+def test_translate_real_model_produces_useful_english(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    result = invoke(
+        home,
+        "--config",
+        os.environ["CARAWAY_REAL_MODEL_CONFIG"],
+        "translate",
+        "-",
+        stdin="Բարև",
+    )
+    assert (result.returncode, "hello" in result.stdout.lower()) == (0, True), (
+        "real model did not produce useful English"
     )
 
 
