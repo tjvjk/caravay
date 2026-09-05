@@ -1,7 +1,7 @@
 # Caraway
 
 Caraway is a development CLI for offline Source Armenian language processing on
-macOS. The current slice reports whether its pinned managed model is installed.
+macOS. It explicitly downloads and reports the status of its pinned managed model.
 
 ## Development setup
 
@@ -9,6 +9,7 @@ Install the locked Python 3.13 environment and run the command through `uv`:
 
 ```console
 uv sync --python 3.13
+uv run caraway models download
 uv run caraway models status
 ```
 
@@ -39,6 +40,6 @@ cache_dir = "~/Library/Caches/caraway"
 ```
 
 Configuration errors leave stdout empty, write an `invalid_config` diagnostic to
-stderr, and exit with status `2`. The current development slice only inspects a
-local snapshot; model downloading and language-processing commands are not yet
-available.
+stderr, and exit with status `2`. Downloads use reusable temporary state, verify
+every published file, and safely replace invalid snapshots. Language-processing
+commands are not yet available.

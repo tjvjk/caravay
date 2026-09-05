@@ -16,8 +16,9 @@ snapshot.
       destination filesystem.
 - [ ] Publication requires a manifest with expected byte sizes and cryptographic
       digests, verifies every digest, and atomically makes the snapshot ready.
-- [ ] Interrupted transfers retain resumable partial data without exposing an
-      incomplete snapshot as ready.
+- [ ] Interrupted transfers retain every completed file that the standard Hugging
+      Face Hub client can reuse without exposing an incomplete snapshot as ready;
+      bytes from a file interrupted mid-transfer need not survive process exit.
 - [ ] A per-snapshot lock rejects a concurrent downloader with
       `download_in_progress`, status 1, and no primary stdout.
 - [ ] Starting or resuming a transfer, or preparing invalid-snapshot replacement,
@@ -35,3 +36,17 @@ snapshot.
       recovery, insufficient space, failure safety, and idempotence through local
       controlled download fixtures.
 
+## Decisions
+
+- Caraway remains a thin Unix-style orchestrator around
+  `huggingface_hub.snapshot_download`: the Hub client owns HTTP, redirects,
+  retries, concurrent file transfer, revision resolution, and reuse of completed
+  staged files. Caraway does not implement its own HTTP or Range downloader.
+- Caraway owns only its managed-cache contract: the immediate per-snapshot lock,
+  20 GiB preflight, final SHA-256 manifest, full pre-publication verification,
+  same-filesystem atomic rename, and recoverable quarantine of an invalid
+  published snapshot.
+- Current Hub releases remove a process-unique incomplete file after a failed
+  transfer. Therefore resume across invocations means reusing completed files;
+  the interrupted file itself may restart. This is preferred to duplicating the
+  Hub client's network stack.
