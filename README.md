@@ -61,5 +61,7 @@ uv run caraway transcribe armenian.wav
 uv run caraway transcribe --format jsonl armenian.m4a
 ```
 
+Each completed audio segment is flushed to stdout as soon as it is ready.
+
 Backend diagnostics are hidden by default; pass `--verbose` after `translate` to
 inspect model-loading details.

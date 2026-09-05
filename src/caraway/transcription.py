@@ -178,40 +178,52 @@ def dump(document: dict[str, object]) -> str:
     return json.dumps(document, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
-def emit(
+def write(
+    stream: TextIO,
+    result: Result,
+    index: int,
+    representation: Format,
+) -> bool:
+    """Write and flush one completed transcription segment."""
+    if representation == "text":
+        if result.text:
+            stream.write(f"{result.text.strip()}\n")
+        stream.flush()
+        return True
+    stream.write(
+        dump(
+            {
+                "schema_version": 1,
+                "type": "segment",
+                "index": index,
+                "outcome": result.outcome,
+                "text": result.text or None,
+                "issues": [
+                    {
+                        "stage": problem.stage,
+                        "code": problem.code,
+                        "message": problem.message,
+                    }
+                    for problem in result.issues
+                ],
+            }
+        )
+    )
+    stream.flush()
+    return True
+
+
+def finish(
     stream: TextIO,
     results: tuple[Result, ...],
     representation: Format,
     source: str,
     backend: Backend,
 ) -> bool:
-    """Write ordered transcription results and an orderly summary."""
-    outcome = aggregate(results)
+    """Write and flush the terminal transcription summary."""
     if representation == "text":
-        for result in results:
-            if result.text:
-                stream.write(f"{result.text.strip()}\n")
         return True
-    for index, result in enumerate(results):
-        stream.write(
-            dump(
-                {
-                    "schema_version": 1,
-                    "type": "segment",
-                    "index": index,
-                    "outcome": result.outcome,
-                    "text": result.text or None,
-                    "issues": [
-                        {
-                            "stage": problem.stage,
-                            "code": problem.code,
-                            "message": problem.message,
-                        }
-                        for problem in result.issues
-                    ],
-                }
-            )
-        )
+    outcome = aggregate(results)
     counts = {
         name: sum(result.outcome == name for result in results)
         for name in ("completed", "degraded", "skipped", "failed")
@@ -237,6 +249,21 @@ def emit(
             for problem in result.issues
         )
     stream.write(dump(summary))
+    stream.flush()
+    return True
+
+
+def emit(
+    stream: TextIO,
+    results: tuple[Result, ...],
+    representation: Format,
+    source: str,
+    backend: Backend,
+) -> bool:
+    """Write ordered transcription results and an orderly summary."""
+    for index, result in enumerate(results):
+        write(stream, result, index, representation)
+    finish(stream, results, representation, source, backend)
     return True
 
 
@@ -270,6 +297,7 @@ def fail(
             },
         }
         stream.write(dump(document))
+        stream.flush()
     return True
 
 
