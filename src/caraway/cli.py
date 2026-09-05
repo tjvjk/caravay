@@ -205,7 +205,7 @@ def run(arguments: argparse.Namespace, config: Settings) -> int:
         source = language(arguments.source)
         target = language(arguments.target)
         audio = transcription.read(arguments.audio)
-        speech, text = execution.plan(
+        plan = execution.plan(
             arguments.route or "",
             arguments.fused,
             arguments.speech,
@@ -224,7 +224,7 @@ def run(arguments: argparse.Namespace, config: Settings) -> int:
     try:
         if not arguments.quiet and sys.stderr.isatty():
             print("Loading composed models", file=sys.stderr)
-        recognizer = backend.load_speech(path)
+        recognizer = backend.recognize(path)
         translator = backend.load(path)
     except Exception as error:
         print(f"execution_failed: model loading failed: {error}", file=sys.stderr)
@@ -234,10 +234,7 @@ def run(arguments: argparse.Namespace, config: Settings) -> int:
         execution.fail(
             sys.stdout,
             arguments.format,
-            source,
-            target,
-            speech,
-            text,
+            plan,
             problem,
         )
         return 1
@@ -281,7 +278,7 @@ def run(arguments: argparse.Namespace, config: Settings) -> int:
         if result.outcome == "failed":
             break
     values = tuple(results)
-    execution.finish(sys.stdout, values, arguments.format, source, target, speech, text)
+    execution.finish(sys.stdout, values, arguments.format, plan)
     outcome = execution.aggregate(values)
     return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
 
