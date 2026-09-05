@@ -41,7 +41,7 @@ class ValidationError(ValueError):
 class Runtime(Protocol):
     """Describe the lazily imported heavyweight backend module."""
 
-    def validate(self) -> bool:
+    def validate(self, verbose: bool) -> bool:
         """Require the configured runtime device."""
         ...
 
@@ -80,7 +80,7 @@ def capability(backend: str, source: str, target: str) -> bool:
     return True
 
 
-def validate(root: Path) -> Path:
+def validate(root: Path, verbose: bool) -> Path:
     """Require a ready snapshot and an available MPS runtime in order."""
     state = inspect(root)
     if state == "missing":
@@ -91,7 +91,7 @@ def validate(root: Path) -> Path:
         raise ValidationError(
             "model_cache_invalid: installed model snapshot is invalid"
         )
-    runtime().validate()
+    runtime().validate(verbose)
     return snapshot(root)
 
 
