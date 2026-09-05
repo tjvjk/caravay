@@ -83,8 +83,9 @@ def process(arguments: argparse.Namespace, config: Settings) -> int:
         source = language(arguments.source)
         target = language(arguments.target)
         text = read(arguments.text)
-        backend = arguments.backend or config.commands.translate.backend
-        capability(backend, source, target)
+        backend = capability(
+            arguments.backend or config.commands.translate.backend, source, target
+        )
         if not text:
             empty(sys.stdout, arguments.format, source, target, backend)
             return 4

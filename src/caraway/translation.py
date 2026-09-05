@@ -6,21 +6,75 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal, Protocol, TextIO, cast
+from typing import Final, Literal, NotRequired, Protocol, TextIO, TypedDict, cast
 
 from caraway.models import inspect
-from caraway.settings import Settings
+from caraway.settings import Backend, Settings
 
 Outcome = Literal["completed", "degraded", "skipped", "failed"]
-FORMAT: Final = ("text", "jsonl")
+Format = Literal["text", "jsonl"]
+Stage = Literal["text_to_text"]
+FORMAT: Final[tuple[Format, ...]] = ("text", "jsonl")
 LANGUAGE: Final = re.compile(r"[a-z]{3}\Z")
+
+
+class IssueDocument(TypedDict):
+    """Define one schema-version-one issue object."""
+
+    stage: Stage
+    code: str
+    message: str
+
+
+class CountsDocument(TypedDict):
+    """Define schema-version-one segment counts."""
+
+    total: int
+    completed: int
+    degraded: int
+    skipped: int
+    failed: int
+
+
+class BackendsDocument(TypedDict):
+    """Define the resolved translation backend bindings."""
+
+    text_to_text: Backend
+
+
+class SegmentDocument(TypedDict):
+    """Define one schema-version-one segment record."""
+
+    schema_version: Literal[1]
+    type: Literal["segment"]
+    index: int
+    outcome: Outcome
+    text: str | None
+    issues: list[IssueDocument]
+
+
+class SummaryDocument(TypedDict):
+    """Define one schema-version-one translation summary."""
+
+    schema_version: Literal[1]
+    type: Literal["summary"]
+    command: Literal["translate"]
+    outcome: Outcome
+    source_language: str
+    target_language: str
+    backends: BackendsDocument
+    segments: CountsDocument
+    error: NotRequired[IssueDocument]
+
+
+Document = SegmentDocument | SummaryDocument
 
 
 @dataclass(frozen=True)
 class Issue:
     """Describe one machine-readable text translation issue."""
 
-    stage: Literal["text_to_text"]
+    stage: Stage
     code: str
     message: str
 
@@ -71,13 +125,13 @@ def language(value: str) -> str:
     return value
 
 
-def capability(backend: str, source: str, target: str) -> bool:
+def capability(backend: str, source: str, target: str) -> Backend:
     """Validate the named backend's language-qualified text capability."""
     if backend != Settings.backend_name or source != "hye" or target != "eng":
         raise ValidationError(
             f"unsupported_capability: {backend} cannot translate {source} to {target}"
         )
-    return True
+    return cast(Backend, backend)
 
 
 def validate(root: Path, verbose: bool) -> Path:
@@ -118,18 +172,22 @@ def trim(text: str) -> str:
     return text
 
 
-def issue(value: Issue) -> dict[str, str]:
+def issue(value: Issue) -> IssueDocument:
     """Serialize one issue for schema version one."""
     return {"stage": value.stage, "code": value.code, "message": value.message}
 
 
 def summary(
-    outcome: Outcome, source: str, target: str, backend: str, total: int
-) -> dict[str, object]:
+    outcome: Outcome, source: str, target: str, backend: Backend, total: int
+) -> SummaryDocument:
     """Build a schema-version-one translation summary."""
-    counts = {"total": total, "completed": 0, "degraded": 0, "skipped": 0, "failed": 0}
-    if total:
-        counts[outcome] = 1
+    counts: CountsDocument = {
+        "total": total,
+        "completed": int(total > 0 and outcome == "completed"),
+        "degraded": int(total > 0 and outcome == "degraded"),
+        "skipped": int(total > 0 and outcome == "skipped"),
+        "failed": int(total > 0 and outcome == "failed"),
+    }
     return {
         "schema_version": 1,
         "type": "summary",
@@ -142,20 +200,25 @@ def summary(
     }
 
 
+def dump(document: Document) -> str:
+    """Serialize one typed schema-version-one document as compact JSONL."""
+    return json.dumps(document, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+
 def emit(
     stream: TextIO,
     result: Result,
-    representation: str,
+    representation: Format,
     source: str,
     target: str,
-    backend: str,
+    backend: Backend,
 ) -> bool:
     """Write one translation result in the selected stdout format."""
     if representation == "text":
         if result.text:
             stream.write(f"{result.text.strip()}\n")
         return True
-    segment = {
+    segment: SegmentDocument = {
         "schema_version": 1,
         "type": "segment",
         "index": 0,
@@ -163,36 +226,22 @@ def emit(
         "text": result.text or None,
         "issues": [issue(value) for value in result.issues],
     }
-    stream.write(json.dumps(segment, ensure_ascii=False, separators=(",", ":")) + "\n")
+    stream.write(dump(segment))
     terminal = summary(result.outcome, source, target, backend, 1)
     if result.outcome == "failed":
         terminal["error"] = issue(result.issues[-1])
-    stream.write(
-        json.dumps(
-            terminal,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-        + "\n"
-    )
+    stream.write(dump(terminal))
     return True
 
 
 def empty(
     stream: TextIO,
-    representation: str,
+    representation: Format,
     source: str,
     target: str,
-    backend: str,
+    backend: Backend,
 ) -> bool:
     """Write the skipped representation for empty valid input."""
     if representation == "jsonl":
-        stream.write(
-            json.dumps(
-                summary("skipped", source, target, backend, 0),
-                ensure_ascii=False,
-                separators=(",", ":"),
-            )
-            + "\n"
-        )
+        stream.write(dump(summary("skipped", source, target, backend, 0)))
     return True
