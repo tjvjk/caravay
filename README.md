@@ -1,8 +1,9 @@
 # Caraway
 
 Caraway is a development CLI for offline Source Armenian language processing on
-macOS. It explicitly downloads its pinned managed model and translates Source
-Armenian text to English without network access during processing.
+macOS. It explicitly downloads its pinned managed model, transcribes Source
+Armenian audio, and translates Source Armenian text to English without network
+access during processing.
 
 ## Development setup
 
@@ -13,6 +14,8 @@ uv sync --python 3.13
 uv run caraway models download
 uv run caraway models status
 ```
+
+Audio decoding requires `ffmpeg` on `PATH`.
 
 The status command prints exactly one value:
 
@@ -50,6 +53,15 @@ Translate a UTF-8 file or piped text after downloading the model:
 uv run caraway translate armenian.txt
 printf 'Բարեւ' | uv run caraway translate -
 ```
+
+Transcribe one local audio file into ordered Source Armenian text:
+
+```console
+uv run caraway transcribe armenian.wav
+uv run caraway transcribe --format jsonl armenian.m4a
+```
+
+Each completed audio segment is flushed to stdout as soon as it is ready.
 
 Backend diagnostics are hidden by default; pass `--verbose` after `translate` to
 inspect model-loading details.

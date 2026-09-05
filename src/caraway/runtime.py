@@ -1,18 +1,33 @@
 """Run the heavyweight SeamlessM4T text translation backend."""
 
+from array import array
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
 import torch
-from transformers import AutoProcessor, SeamlessM4Tv2ForTextToText, logging
+from transformers import (
+    AutoProcessor,
+    SeamlessM4Tv2ForSpeechToText,
+    SeamlessM4Tv2ForTextToText,
+    logging,
+)
 
+from caraway import transcription
 from caraway.translation import Issue, Result, ValidationError, trim
 
 
 @dataclass(frozen=True)
 class Backend:
     """Hold the loaded processor and text translation model."""
+
+    processor: Any
+    model: Any
+
+
+@dataclass(frozen=True)
+class Speech:
+    """Hold the loaded processor and speech recognition model."""
 
     processor: Any
     model: Any
@@ -95,3 +110,38 @@ def translate(path: Path, source: str, target: str, text: str) -> Result:
     backend = load(path)
     generated = generate(backend, source, target, text)
     return resolve(generated)
+
+
+def load_speech(path: Path) -> Speech:
+    """Load the pinned processor and FP16 speech model onto MPS."""
+    processors = cast(Any, AutoProcessor)
+    models = cast(Any, SeamlessM4Tv2ForSpeechToText)
+    processor = processors.from_pretrained(path, local_files_only=True)
+    model = (
+        models.from_pretrained(path, local_files_only=True, dtype=torch.float16)
+        .to("mps")
+        .eval()
+    )
+    return Speech(processor, model)
+
+
+def transcribe(
+    backend: object, source: str, audio: array[float]
+) -> transcription.Result:
+    """Transcribe one audio segment offline on MPS with FP16."""
+    speech = cast(Speech, backend)
+    inputs = speech.processor(
+        audio=list(audio), sampling_rate=16_000, return_tensors="pt"
+    )
+    values = {
+        name: value.to(device="mps", dtype=torch.float16)
+        for name, value in inputs.items()
+    }
+    with torch.inference_mode():
+        tokens = speech.model.generate(**values, tgt_lang=source, max_new_tokens=256)
+    generated = speech.processor.decode(
+        tokens[0],
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False,
+    )
+    return transcription.resolve(cast(str, generated))

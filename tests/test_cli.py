@@ -6,6 +6,7 @@ import pty
 import subprocess
 import sys
 import time
+import wave
 from collections.abc import Mapping
 from pathlib import Path
 from uuid import uuid4
@@ -254,9 +255,16 @@ class Batch(dict):
     def to(self, device):
         return self
 
+class Tensor:
+    def to(self, **options):
+        return self
+
 class AutoProcessor:
+    index = 0
     @classmethod
     def from_pretrained(cls, path, **options):
+        if os.environ.get("CARAWAY_RUNTIME_FAIL") == "load":
+            raise RuntimeError("controlled model loading failure")
         if (
             not options.get("local_files_only")
             or os.environ.get("HF_HUB_OFFLINE") != "1"
@@ -266,16 +274,34 @@ class AutoProcessor:
         if not logging.quiet:
             print("controlled processor report", file=sys.stderr)
         return cls()
-    def __call__(self, *, text, src_lang, return_tensors):
-        return Batch(input_text=text, source=src_lang)
+    def __call__(self, **options):
+        if "audio" in options:
+            if not isinstance(options["audio"], list):
+                raise TypeError(
+                    "only a single or a list of entries is supported but got "
+                    f"type={type(options['audio'])}"
+                )
+            return Batch(input_features=Tensor())
+        return Batch(options)
     def decode(self, tokens, *, skip_special_tokens, clean_up_tokenization_spaces):
         if clean_up_tokenization_spaces is not False:
             print("controlled BPE warning", file=sys.stderr)
-        return os.environ["CARAWAY_OUTPUT"]
+        outputs = __import__("json").loads(
+            os.environ.get(
+                "CARAWAY_OUTPUTS",
+                __import__("json").dumps([os.environ["CARAWAY_OUTPUT"]]),
+            )
+        )
+        output = outputs[AutoProcessor.index]
+        AutoProcessor.index += 1
+        return output
 
 class SeamlessM4Tv2ForTextToText:
+    generated = 0
     @classmethod
     def from_pretrained(cls, path, **options):
+        if os.environ.get("CARAWAY_RUNTIME_FAIL") == "load":
+            raise RuntimeError("controlled model loading failure")
         if not options.get("local_files_only") or options.get("dtype") != "float16":
             raise RuntimeError("unsafe model loading options")
         if not logging.quiet:
@@ -288,11 +314,26 @@ class SeamlessM4Tv2ForTextToText:
     def eval(self):
         return self
     def generate(self, **options):
-        if os.environ.get("CARAWAY_RUNTIME_FAIL"):
+        if (
+            SeamlessM4Tv2ForTextToText.generated > 0
+            and (seconds := os.environ.get("CARAWAY_RUNTIME_DELAY_AFTER_FIRST"))
+        ):
+            Path = __import__("pathlib").Path
+            Path(os.environ["CARAWAY_LATER_STARTED"]).touch()
+            __import__("time").sleep(float(seconds))
+        if os.environ.get("CARAWAY_RUNTIME_FAIL") or os.environ.get(
+            "CARAWAY_RUNTIME_FAIL_INDEX"
+        ) == str(SeamlessM4Tv2ForTextToText.generated):
             raise RuntimeError("controlled inference failure")
-        if options.get("tgt_lang") != "eng":
+        if options.get("tgt_lang") not in ("eng", "hye"):
             raise RuntimeError("wrong target")
+        if options.get("tgt_lang") == "hye" and options.get("max_new_tokens") != 256:
+            raise RuntimeError("unbounded speech generation")
+        SeamlessM4Tv2ForTextToText.generated += 1
         return [[1]]
+
+class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2ForTextToText):
+    pass
 ''',
         encoding="utf-8",
     )
@@ -301,6 +342,265 @@ class SeamlessM4Tv2ForTextToText:
         "CARAWAY_MPS": "1",
         "CARAWAY_OUTPUT": output,
     }
+
+
+def audio(tmp_path: Path, seconds: int = 21) -> Path:
+    """Create a small irregular silent WAV input."""
+    path = tmp_path / f"ձայն-{uuid4()}.wav"
+    with wave.open(str(path), "wb") as stream:
+        stream.setnchannels(1)
+        stream.setsampwidth(2)
+        stream.setframerate(16_000)
+        stream.writeframes(b"\0\0" * 16_000 * seconds)
+    return path
+
+
+def speech(tmp_path: Path, outputs: tuple[str, ...]) -> dict[str, str]:
+    """Create a controlled speech runtime with one output per segment."""
+    additions = runtime(tmp_path)
+    additions["CARAWAY_OUTPUTS"] = json.dumps(outputs, ensure_ascii=False)
+    return additions
+
+
+def transcribe(
+    home: Path,
+    *arguments: str,
+    additions: Mapping[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Invoke transcription with an explicit isolated configuration."""
+    home.mkdir(parents=True, exist_ok=True)
+    config = home / f"կարգավորում-{uuid4()}.toml"
+    cache = home / "Library" / "Caches" / "caraway"
+    config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
+    return invoke(
+        home, "--config", str(config), "transcribe", *arguments, additions=additions
+    )
+
+
+def test_transcribe_requires_one_local_audio_file(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    result = transcribe(home, "-")
+    assert (result.returncode, result.stdout) == (2, ""), "audio stdin was accepted"
+
+
+def test_transcribe_requires_an_audio_operand(tmp_path: Path) -> None:
+    result = transcribe(tmp_path / f"տուն-{uuid4()}")
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "missing audio operand was accepted"
+    )
+
+
+def test_transcribe_rejects_an_unreadable_audio_file(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    source = tmp_path / f"ձայն-{uuid4()}.wav"
+    source.write_bytes("անվավեր".encode())
+    source.chmod(0)
+    result = transcribe(home, str(source))
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "unreadable audio file was accepted"
+    )
+
+
+def test_transcribe_emits_ordered_useful_segments(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path)
+    result = transcribe(
+        home,
+        str(source),
+        additions=speech(tmp_path, ("  Բարեւ  ", "", "Վերջ")),
+    )
+    assert (result.returncode, result.stdout) == (3, "Բարեւ\nՎերջ\n"), (
+        "transcription lost ordered useful text"
+    )
+
+
+def test_transcribe_flushes_each_completed_segment(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path)
+    additions = speech(tmp_path, ("Առաջին", "Երկրորդ", "Երրորդ"))
+    additions["CARAWAY_RUNTIME_DELAY_AFTER_FIRST"] = "1.5"
+    marker = tmp_path / f"հաջորդ-{uuid4()}"
+    additions["CARAWAY_LATER_STARTED"] = str(marker)
+    environment = os.environ.copy()
+    environment.update(additions)
+    environment["HOME"] = str(home)
+    config = home / f"կարգավորում-{uuid4()}.toml"
+    cache = home / "Library" / "Caches" / "caraway"
+    config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
+    command = Path(sys.executable).with_name("caraway")
+    with subprocess.Popen(
+        (command, "--config", str(config), "transcribe", str(source)),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=environment,
+        text=True,
+    ) as process:
+        assert process.stdout is not None
+        line = process.stdout.readline()
+        delayed = marker.exists()
+        process.communicate(timeout=8)
+    assert (line, delayed) == ("Առաջին\n", False), (
+        "completed transcription segment remained buffered"
+    )
+
+
+@pytest.mark.parametrize("operand", ("https://օրինակ.test/ձայն.wav", "folder"))
+def test_transcribe_rejects_non_file_audio_operands(
+    tmp_path: Path, operand: str
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    home.joinpath("folder").mkdir(parents=True)
+    result = transcribe(home, operand)
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "non-file audio operand was accepted"
+    )
+
+
+def test_transcribe_rejects_extra_audio_operands(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    result = transcribe(home, "մեկ.wav", "երկու.wav")
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "extra audio operand was accepted"
+    )
+
+
+def test_transcribe_truncates_repetition_and_continues(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path)
+    result = transcribe(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions=speech(tmp_path, ("Օգտակար կրկին կրկին կրկին", "Հաջորդ", "Վերջ")),
+    )
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (
+        result.returncode,
+        tuple(record.get("text") for record in records[:-1]),
+        tuple(record["outcome"] for record in records[:-1]),
+        records[-1],
+    ) == (
+        3,
+        ("Օգտակար", "Հաջորդ", "Վերջ"),
+        ("degraded", "completed", "completed"),
+        {
+            "schema_version": 1,
+            "type": "summary",
+            "command": "transcribe",
+            "outcome": "degraded",
+            "source_language": "hye",
+            "backends": {"speech_to_text": "seamlessm4t-large-v2"},
+            "segments": {
+                "total": 3,
+                "completed": 2,
+                "degraded": 1,
+                "skipped": 0,
+                "failed": 0,
+            },
+        },
+    ), "repetition prevented later transcription segments"
+
+
+def test_transcribe_serializes_a_fatal_partial_jsonl_outcome(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path)
+    additions = speech(tmp_path, ("Առաջին", "Չօգտագործված"))
+    additions["CARAWAY_RUNTIME_FAIL_INDEX"] = "1"
+    result = transcribe(home, "--format", "jsonl", str(source), additions=additions)
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (
+        result.returncode,
+        len(records),
+        records[0]["text"],
+        records[1]["outcome"],
+        records[2]["segments"],
+        records[2]["error"],
+    ) == (
+        1,
+        3,
+        "Առաջին",
+        "failed",
+        {"total": 2, "completed": 1, "degraded": 0, "skipped": 0, "failed": 1},
+        records[1]["issues"][0],
+    ), "fatal partial transcription serialized an invalid JSONL outcome"
+
+
+def test_transcribe_preserves_text_before_a_fatal_segment(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path)
+    additions = speech(tmp_path, ("Պահպանված", "Չօգտագործված"))
+    additions["CARAWAY_RUNTIME_FAIL_INDEX"] = "1"
+    result = transcribe(home, str(source), additions=additions)
+    assert (result.returncode, result.stdout) == (1, "Պահպանված\n"), (
+        "fatal transcription discarded prior text output"
+    )
+
+
+def test_transcribe_model_load_failure_attempts_no_jsonl_segments(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    additions = speech(tmp_path, ("Չօգտագործված",))
+    additions["CARAWAY_RUNTIME_FAIL"] = "load"
+    result = transcribe(home, "--format", "jsonl", str(source), additions=additions)
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (result.returncode, len(records), records[0]["segments"]["total"]) == (
+        1,
+        1,
+        0,
+    ), "model load failure fabricated an attempted segment"
+
+
+@pytest.mark.parametrize("value", ("HY", "hye ", "hyե", "HYE"))
+def test_transcribe_rejects_malformed_language_codes(
+    tmp_path: Path, value: str
+) -> None:
+    source = audio(tmp_path, 1)
+    result = transcribe(tmp_path / f"տուն-{uuid4()}", "--source", value, str(source))
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "malformed transcription language was accepted"
+    )
+
+
+def test_transcribe_rejects_an_unsupported_capability(tmp_path: Path) -> None:
+    source = audio(tmp_path, 1)
+    result = transcribe(
+        tmp_path / f"տուն-{uuid4()}",
+        "--source",
+        "fra",
+        str(source),
+    )
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "unsupported transcription capability was accepted"
+    )
+
+
+@pytest.mark.skipif(
+    "CARAWAY_REAL_MODEL_CONFIG" not in os.environ,
+    reason="real model smoke test is opt-in",
+)
+def test_transcribe_real_model_produces_useful_source_armenian(tmp_path: Path) -> None:
+    result = invoke(
+        tmp_path / f"տուն-{uuid4()}",
+        "--config",
+        os.environ["CARAWAY_REAL_MODEL_CONFIG"],
+        "transcribe",
+        os.environ["CARAWAY_REAL_AUDIO"],
+        network=False,
+    )
+    assert (result.returncode, bool(result.stdout.strip())) == (0, True), (
+        "real model did not produce useful Source Armenian"
+    )
 
 
 def test_translate_reads_source_armenian_from_a_file(tmp_path: Path) -> None:
