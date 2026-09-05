@@ -314,6 +314,11 @@ class SeamlessM4Tv2ForTextToText:
     def eval(self):
         return self
     def generate(self, **options):
+        if (
+            SeamlessM4Tv2ForTextToText.generated > 0
+            and (seconds := os.environ.get("CARAWAY_RUNTIME_DELAY_AFTER_FIRST"))
+        ):
+            __import__("time").sleep(float(seconds))
         if os.environ.get("CARAWAY_RUNTIME_FAIL") or os.environ.get(
             "CARAWAY_RUNTIME_FAIL_INDEX"
         ) == str(SeamlessM4Tv2ForTextToText.generated):
@@ -405,6 +410,36 @@ def test_transcribe_emits_ordered_useful_segments(tmp_path: Path) -> None:
     )
     assert (result.returncode, result.stdout) == (3, "Բարեւ\nՎերջ\n"), (
         "transcription lost ordered useful text"
+    )
+
+
+def test_transcribe_flushes_each_completed_segment(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path)
+    additions = speech(tmp_path, ("Առաջին", "Երկրորդ", "Երրորդ"))
+    additions["CARAWAY_RUNTIME_DELAY_AFTER_FIRST"] = "1.5"
+    environment = os.environ.copy()
+    environment.update(additions)
+    environment["HOME"] = str(home)
+    config = home / f"կարգավորում-{uuid4()}.toml"
+    cache = home / "Library" / "Caches" / "caraway"
+    config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
+    command = Path(sys.executable).with_name("caraway")
+    started = time.monotonic()
+    with subprocess.Popen(
+        (command, "--config", str(config), "transcribe", str(source)),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=environment,
+        text=True,
+    ) as process:
+        assert process.stdout is not None
+        line = process.stdout.readline()
+        elapsed = time.monotonic() - started
+        process.communicate(timeout=8)
+    assert (line, elapsed < 1.0) == ("Առաջին\n", True), (
+        "completed transcription segment remained buffered"
     )
 
 

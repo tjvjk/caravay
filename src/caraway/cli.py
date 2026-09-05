@@ -156,7 +156,7 @@ def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
         )
         transcription.fail(sys.stdout, arguments.format, source, backend, problem)
         return 1
-    for segment in segments:
+    for index, segment in enumerate(segments):
         try:
             result = transcription.transcribe(loaded, source, segment)
         except Exception as error:
@@ -176,13 +176,14 @@ def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
                 ),
             )
         results.append(result)
+        transcription.write(sys.stdout, result, index, arguments.format)
         if result.outcome in ("degraded", "skipped"):
             for problem in result.issues:
                 print(f"{problem.code}: {problem.message}", file=sys.stderr)
         if result.outcome == "failed":
             break
     values = tuple(results)
-    transcription.emit(sys.stdout, values, arguments.format, source, backend)
+    transcription.finish(sys.stdout, values, arguments.format, source, backend)
     outcome = transcription.aggregate(values)
     return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
 
