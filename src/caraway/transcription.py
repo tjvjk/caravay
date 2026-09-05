@@ -8,7 +8,15 @@ import subprocess
 from array import array
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal, Protocol, TextIO, cast
+from typing import (
+    Final,
+    Literal,
+    NotRequired,
+    Protocol,
+    TextIO,
+    TypedDict,
+    cast,
+)
 
 from caraway.models import inspect
 from caraway.settings import Backend, Settings
@@ -17,6 +25,57 @@ from caraway.translation import Format, Outcome, ValidationError
 Stage = Literal["speech_to_text"]
 RATE: Final = 16_000
 SPAN: Final = RATE * 10
+
+
+class IssueDocument(TypedDict):
+    """Define one schema-version-one transcription issue."""
+
+    stage: Stage
+    code: str
+    message: str
+
+
+class CountsDocument(TypedDict):
+    """Define schema-version-one transcription counts."""
+
+    total: int
+    completed: int
+    degraded: int
+    skipped: int
+    failed: int
+
+
+class BackendsDocument(TypedDict):
+    """Define the resolved transcription backend binding."""
+
+    speech_to_text: Backend
+
+
+class SegmentDocument(TypedDict):
+    """Define one schema-version-one transcription segment."""
+
+    schema_version: Literal[1]
+    type: Literal["segment"]
+    index: int
+    outcome: Outcome
+    text: str | None
+    issues: list[IssueDocument]
+
+
+class SummaryDocument(TypedDict):
+    """Define one schema-version-one transcription summary."""
+
+    schema_version: Literal[1]
+    type: Literal["summary"]
+    command: Literal["transcribe"]
+    outcome: Outcome
+    source_language: str
+    backends: BackendsDocument
+    segments: CountsDocument
+    error: NotRequired[IssueDocument]
+
+
+Document = SegmentDocument | SummaryDocument
 
 
 @dataclass(frozen=True)
@@ -173,7 +232,57 @@ def aggregate(results: tuple[Result, ...]) -> Outcome:
     return "degraded" if useful else "skipped"
 
 
-def dump(document: dict[str, object]) -> str:
+def issue(problem: Issue) -> IssueDocument:
+    """Serialize one transcription issue for schema version one."""
+    return {
+        "stage": problem.stage,
+        "code": problem.code,
+        "message": problem.message,
+    }
+
+
+def segment(result: Result, index: int) -> SegmentDocument:
+    """Build one schema-version-one transcription segment."""
+    return {
+        "schema_version": 1,
+        "type": "segment",
+        "index": index,
+        "outcome": result.outcome,
+        "text": result.text or None,
+        "issues": [issue(problem) for problem in result.issues],
+    }
+
+
+def counts(results: tuple[Result, ...]) -> CountsDocument:
+    """Count every attempted transcription outcome."""
+    return {
+        "total": len(results),
+        "completed": sum(result.outcome == "completed" for result in results),
+        "degraded": sum(result.outcome == "degraded" for result in results),
+        "skipped": sum(result.outcome == "skipped" for result in results),
+        "failed": sum(result.outcome == "failed" for result in results),
+    }
+
+
+def summary(
+    outcome: Outcome,
+    source: str,
+    backend: Backend,
+    values: CountsDocument,
+) -> SummaryDocument:
+    """Build one schema-version-one transcription summary."""
+    return {
+        "schema_version": 1,
+        "type": "summary",
+        "command": "transcribe",
+        "outcome": outcome,
+        "source_language": source,
+        "backends": {"speech_to_text": backend},
+        "segments": values,
+    }
+
+
+def dump(document: Document) -> str:
     """Serialize one compact schema-version-one JSONL document."""
     return json.dumps(document, ensure_ascii=False, separators=(",", ":")) + "\n"
 
@@ -190,25 +299,7 @@ def write(
             stream.write(f"{result.text.strip()}\n")
         stream.flush()
         return True
-    stream.write(
-        dump(
-            {
-                "schema_version": 1,
-                "type": "segment",
-                "index": index,
-                "outcome": result.outcome,
-                "text": result.text or None,
-                "issues": [
-                    {
-                        "stage": problem.stage,
-                        "code": problem.code,
-                        "message": problem.message,
-                    }
-                    for problem in result.issues
-                ],
-            }
-        )
-    )
+    stream.write(dump(segment(result, index)))
     stream.flush()
     return True
 
@@ -224,46 +315,16 @@ def finish(
     if representation == "text":
         return True
     outcome = aggregate(results)
-    counts = {
-        name: sum(result.outcome == name for result in results)
-        for name in ("completed", "degraded", "skipped", "failed")
-    }
-    summary: dict[str, object] = {
-        "schema_version": 1,
-        "type": "summary",
-        "command": "transcribe",
-        "outcome": outcome,
-        "source_language": source,
-        "backends": {"speech_to_text": backend},
-        "segments": {"total": len(results), **counts},
-    }
+    terminal = summary(outcome, source, backend, counts(results))
     if outcome == "failed":
-        summary["error"] = next(
-            {
-                "stage": problem.stage,
-                "code": problem.code,
-                "message": problem.message,
-            }
+        terminal["error"] = next(
+            issue(problem)
             for result in results
             if result.outcome == "failed"
             for problem in result.issues
         )
-    stream.write(dump(summary))
+    stream.write(dump(terminal))
     stream.flush()
-    return True
-
-
-def emit(
-    stream: TextIO,
-    results: tuple[Result, ...],
-    representation: Format,
-    source: str,
-    backend: Backend,
-) -> bool:
-    """Write ordered transcription results and an orderly summary."""
-    for index, result in enumerate(results):
-        write(stream, result, index, representation)
-    finish(stream, results, representation, source, backend)
     return True
 
 
@@ -276,26 +337,15 @@ def fail(
 ) -> bool:
     """Write a failed zero-segment summary after model loading fails."""
     if representation == "jsonl":
-        document = {
-            "schema_version": 1,
-            "type": "summary",
-            "command": "transcribe",
-            "outcome": "failed",
-            "source_language": source,
-            "backends": {"speech_to_text": backend},
-            "segments": {
-                "total": 0,
-                "completed": 0,
-                "degraded": 0,
-                "skipped": 0,
-                "failed": 0,
-            },
-            "error": {
-                "stage": problem.stage,
-                "code": problem.code,
-                "message": problem.message,
-            },
+        values: CountsDocument = {
+            "total": 0,
+            "completed": 0,
+            "degraded": 0,
+            "skipped": 0,
+            "failed": 0,
         }
+        document = summary("failed", source, backend, values)
+        document["error"] = issue(problem)
         stream.write(dump(document))
         stream.flush()
     return True
