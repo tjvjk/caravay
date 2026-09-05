@@ -86,10 +86,20 @@ class Result:
     issues: tuple[Issue, ...]
 
 
+@dataclass(frozen=True)
+class Plan:
+    """Hold the complete resolved composed execution plan."""
+
+    source: str
+    target: str
+    speech: Backend
+    text: Backend
+
+
 class Runtime(Protocol):
     """Describe the lazily imported heavyweight composed backend module."""
 
-    def load_speech(self, path: Path) -> object:
+    def recognize(self, path: Path) -> object:
         """Load the speech recognition stage."""
         ...
 
@@ -127,7 +137,7 @@ def plan(
     configured: Route,
     source: str,
     target: str,
-) -> tuple[Backend, Backend]:
+) -> Plan:
     """Resolve and validate the complete language-qualified execution plan."""
     if fused and (speech or text):
         raise ValidationError("invalid_route: composed and fused bindings conflict")
@@ -161,7 +171,7 @@ def plan(
             translator = Settings.backend_name
     recognizer = transcription.capability(speech or recognition, source)
     translator = translation.capability(text or translator, source, target)
-    return recognizer, translator
+    return Plan(source, target, recognizer, translator)
 
 
 def issue(stage: Stage, code: str, message: str) -> Issue:
@@ -236,10 +246,7 @@ def counts(results: tuple[Result, ...]) -> CountsDocument:
 
 def summary(
     outcome: Outcome,
-    source: str,
-    target: str,
-    speech: Backend,
-    text: Backend,
+    plan: Plan,
     results: tuple[Result, ...],
 ) -> SummaryDocument:
     """Build the terminal composed summary."""
@@ -249,9 +256,9 @@ def summary(
         "command": "run",
         "route": "composed",
         "outcome": outcome,
-        "source_language": source,
-        "target_language": target,
-        "backends": {"speech_to_text": speech, "text_to_text": text},
+        "source_language": plan.source,
+        "target_language": plan.target,
+        "backends": {"speech_to_text": plan.speech, "text_to_text": plan.text},
         "segments": counts(results),
     }
 
@@ -275,16 +282,13 @@ def finish(
     stream: TextIO,
     results: tuple[Result, ...],
     representation: Format,
-    source: str,
-    target: str,
-    speech: Backend,
-    text: Backend,
+    plan: Plan,
 ) -> bool:
     """Write the terminal composed summary when selected."""
     if representation == "text":
         return True
     outcome = aggregate(results)
-    terminal = summary(outcome, source, target, speech, text, results)
+    terminal = summary(outcome, plan, results)
     if outcome == "failed":
         terminal["error"] = document(results[-1].issues[-1])
     stream.write(json.dumps(terminal, ensure_ascii=False, separators=(",", ":")) + "\n")
@@ -294,16 +298,13 @@ def finish(
 def fail(
     stream: TextIO,
     representation: Format,
-    source: str,
-    target: str,
-    speech: Backend,
-    text: Backend,
+    plan: Plan,
     problem: Issue,
 ) -> bool:
     """Write a failed zero-attempt summary after model loading fails."""
     if representation == "text":
         return True
-    terminal = summary("failed", source, target, speech, text, ())
+    terminal = summary("failed", plan, ())
     terminal["error"] = document(problem)
     stream.write(json.dumps(terminal, ensure_ascii=False, separators=(",", ":")) + "\n")
     return True

@@ -112,7 +112,7 @@ def translate(path: Path, source: str, target: str, text: str) -> Result:
     return resolve(generated)
 
 
-def load_speech(path: Path) -> Speech:
+def recognize(path: Path) -> Speech:
     """Load the pinned processor and FP16 speech model onto MPS."""
     processors = cast(Any, AutoProcessor)
     models = cast(Any, SeamlessM4Tv2ForSpeechToText)
