@@ -1,7 +1,8 @@
 # Caraway
 
 Caraway is a development CLI for offline Source Armenian language processing on
-macOS. It explicitly downloads and reports the status of its pinned managed model.
+macOS. It explicitly downloads its pinned managed model and translates Source
+Armenian text to English without network access during processing.
 
 ## Development setup
 
@@ -41,5 +42,11 @@ cache_dir = "~/Library/Caches/caraway"
 
 Configuration errors leave stdout empty, write an `invalid_config` diagnostic to
 stderr, and exit with status `2`. Downloads use reusable temporary state, verify
-every published file, and safely replace invalid snapshots. Language-processing
-commands are not yet available.
+every published file, and safely replace invalid snapshots.
+
+Translate a UTF-8 file or piped text after downloading the model:
+
+```console
+uv run caraway translate armenian.txt
+printf 'Բարեւ' | uv run caraway translate -
+```
