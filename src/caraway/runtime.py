@@ -130,7 +130,9 @@ def transcribe(
 ) -> transcription.Result:
     """Transcribe one audio segment offline on MPS with FP16."""
     speech = cast(Speech, backend)
-    inputs = speech.processor(audio=audio, sampling_rate=16_000, return_tensors="pt")
+    inputs = speech.processor(
+        audio=list(audio), sampling_rate=16_000, return_tensors="pt"
+    )
     values = {
         name: value.to(device="mps", dtype=torch.float16)
         for name, value in inputs.items()
