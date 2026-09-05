@@ -200,9 +200,49 @@ def summary(
     }
 
 
+def segment(result: Result) -> SegmentDocument:
+    """Build one schema-version-one translation segment."""
+    return {
+        "schema_version": 1,
+        "type": "segment",
+        "index": 0,
+        "outcome": result.outcome,
+        "text": result.text or None,
+        "issues": [issue(value) for value in result.issues],
+    }
+
+
 def dump(document: Document) -> str:
     """Serialize one typed schema-version-one document as compact JSONL."""
     return json.dumps(document, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+
+def write(stream: TextIO, result: Result, representation: Format) -> bool:
+    """Write one translation result in the selected representation."""
+    if representation == "text":
+        if result.text:
+            stream.write(f"{result.text.strip()}\n")
+        return True
+    stream.write(dump(segment(result)))
+    return True
+
+
+def finish(
+    stream: TextIO,
+    result: Result,
+    representation: Format,
+    source: str,
+    target: str,
+    backend: Backend,
+) -> bool:
+    """Write the terminal translation summary when selected."""
+    if representation == "text":
+        return True
+    terminal = summary(result.outcome, source, target, backend, 1)
+    if result.outcome == "failed":
+        terminal["error"] = issue(result.issues[-1])
+    stream.write(dump(terminal))
+    return True
 
 
 def emit(
@@ -213,24 +253,9 @@ def emit(
     target: str,
     backend: Backend,
 ) -> bool:
-    """Write one translation result in the selected stdout format."""
-    if representation == "text":
-        if result.text:
-            stream.write(f"{result.text.strip()}\n")
-        return True
-    segment: SegmentDocument = {
-        "schema_version": 1,
-        "type": "segment",
-        "index": 0,
-        "outcome": result.outcome,
-        "text": result.text or None,
-        "issues": [issue(value) for value in result.issues],
-    }
-    stream.write(dump(segment))
-    terminal = summary(result.outcome, source, target, backend, 1)
-    if result.outcome == "failed":
-        terminal["error"] = issue(result.issues[-1])
-    stream.write(dump(terminal))
+    """Write one translation result and its terminal summary."""
+    write(stream, result, representation)
+    finish(stream, result, representation, source, target, backend)
     return True
 
 

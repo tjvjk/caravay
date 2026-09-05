@@ -7,6 +7,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import cast
 
+from caraway import transcription
 from caraway.models import DownloadError, DownloadLockError, download, inspect
 from caraway.settings import InvalidConfigError, Settings, load
 from caraway.translation import (
@@ -47,6 +48,13 @@ def parser() -> argparse.ArgumentParser:
     translation.add_argument("--format", choices=FORMAT, default="text")
     translation.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
     translation.add_argument("--verbose", action="store_true")
+    speech = commands.add_parser("transcribe")
+    speech.add_argument("audio")
+    speech.add_argument("--source", default="hye")
+    speech.add_argument("--backend")
+    speech.add_argument("--format", choices=FORMAT, default="text")
+    speech.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
+    speech.add_argument("--verbose", action="store_true")
     return result
 
 
@@ -120,6 +128,66 @@ def process(arguments: argparse.Namespace, config: Settings) -> int:
     return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[result.outcome]
 
 
+def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
+    """Validate and execute one offline audio transcription."""
+    try:
+        source = language(arguments.source)
+        audio = transcription.read(arguments.audio)
+        backend = transcription.capability(
+            arguments.backend or config.commands.transcribe.backend, source
+        )
+        path = transcription.validate(config.cache_dir, arguments.verbose)
+        segments = transcription.decode(audio)
+    except ValidationError as error:
+        print(error, file=sys.stderr)
+        return 2
+    results: list[transcription.Result] = []
+    try:
+        loaded = transcription.load(path)
+    except Exception as error:
+        print(
+            f"transcription_failed: speech model loading failed: {error}",
+            file=sys.stderr,
+        )
+        problem = transcription.Issue(
+            "speech_to_text",
+            "transcription_failed",
+            "speech model loading failed",
+        )
+        transcription.fail(sys.stdout, arguments.format, source, backend, problem)
+        return 1
+    for index, segment in enumerate(segments):
+        try:
+            result = transcription.transcribe(loaded, source, segment)
+        except Exception as error:
+            print(
+                f"transcription_failed: speech transcription failed: {error}",
+                file=sys.stderr,
+            )
+            result = transcription.Result(
+                "failed",
+                "",
+                (
+                    transcription.Issue(
+                        "speech_to_text",
+                        "transcription_failed",
+                        "speech transcription failed",
+                    ),
+                ),
+            )
+        results.append(result)
+        transcription.write(sys.stdout, result, index, arguments.format)
+        if result.outcome in ("degraded", "skipped"):
+            for problem in result.issues:
+                print(f"{problem.code}: {problem.message}", file=sys.stderr)
+        if result.outcome == "failed":
+            break
+    values = tuple(results)
+    transcription.finish(sys.stdout, values, arguments.format, source, backend)
+    outcome = transcription.aggregate(values)
+    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
+
+
 def main() -> int:
     """Run the Caraway command-line interface."""
     cast(io.TextIOWrapper, sys.stdin).reconfigure(encoding="utf-8", errors="strict")
@@ -141,6 +209,8 @@ def main() -> int:
         return 2
     if arguments.command == "translate":
         return process(arguments, config)
+    if arguments.command == "transcribe":
+        return transcribe(arguments, config)
     if arguments.action == "status":
         state = inspect(config.cache_dir)
         print(state)
