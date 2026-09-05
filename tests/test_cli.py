@@ -276,6 +276,11 @@ class AutoProcessor:
         return cls()
     def __call__(self, **options):
         if "audio" in options:
+            if not isinstance(options["audio"], list):
+                raise TypeError(
+                    "only a single or a list of entries is supported but got "
+                    f"type={type(options['audio'])}"
+                )
             return Batch(input_features=Tensor())
         return Batch(options)
     def decode(self, tokens, *, skip_special_tokens, clean_up_tokenization_spaces):
