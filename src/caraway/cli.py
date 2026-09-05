@@ -202,30 +202,28 @@ def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
 def run(arguments: argparse.Namespace, config: Settings) -> int:
     """Validate and execute the explicit composed speech-to-English plan."""
     try:
-        source = language(arguments.source)
-        target = language(arguments.target)
-        audio = transcription.read(arguments.audio)
-        plan = execution.plan(
-            arguments.route or "",
-            arguments.fused,
-            arguments.speech,
-            arguments.translation,
-            config.commands.run,
-            source,
-            target,
+        prepared = execution.prepare(
+            execution.Request(
+                arguments.route or "",
+                arguments.fused,
+                arguments.speech,
+                arguments.translation,
+                config.commands.run,
+                arguments.source,
+                arguments.target,
+                arguments.audio,
+                config.cache_dir,
+                arguments.verbose,
+            )
         )
-        path = transcription.validate(config.cache_dir, arguments.verbose)
-        segments = transcription.decode(audio)
     except ValidationError as error:
         print(error, file=sys.stderr)
         return 2
-    results: list[execution.Result] = []
     backend = execution.runtime()
     try:
         if not arguments.quiet and sys.stderr.isatty():
             print("Loading composed models", file=sys.stderr)
-        recognizer = backend.recognize(path)
-        translator = backend.load(path)
+        loaded = execution.load(prepared, backend)
     except Exception as error:
         print(f"execution_failed: model loading failed: {error}", file=sys.stderr)
         problem = execution.Issue(
@@ -234,51 +232,14 @@ def run(arguments: argparse.Namespace, config: Settings) -> int:
         execution.fail(
             sys.stdout,
             arguments.format,
-            plan,
+            prepared.plan,
             problem,
         )
         return 1
-    for index, segment in enumerate(segments):
-        try:
-            recognized = backend.transcribe(recognizer, source, segment)
-        except Exception as error:
-            print(
-                f"transcription_failed: speech transcription failed: {error}",
-                file=sys.stderr,
-            )
-            problem = execution.Issue(
-                "speech_to_text",
-                "transcription_failed",
-                "speech transcription failed",
-            )
-            result = execution.Result("failed", "", "", (problem,))
-        else:
-            try:
-                if not recognized.text:
-                    result = execution.skip(recognized)
-                else:
-                    generated = backend.generate(
-                        translator, source, target, recognized.text
-                    )
-                    result = execution.combine(recognized, backend.resolve(generated))
-            except Exception as error:
-                print(
-                    f"translation_failed: text translation failed: {error}",
-                    file=sys.stderr,
-                )
-                problem = execution.Issue(
-                    "text_to_text", "translation_failed", "text translation failed"
-                )
-                result = execution.Result("failed", "", recognized.text, (problem,))
-        results.append(result)
-        execution.write(sys.stdout, result, index, arguments.format)
-        if result.outcome in ("degraded", "skipped"):
-            for problem in result.issues:
-                print(f"{problem.code}: {problem.message}", file=sys.stderr)
-        if result.outcome == "failed":
-            break
-    values = tuple(results)
-    execution.finish(sys.stdout, values, arguments.format, plan)
+    values = execution.execute(
+        prepared, loaded, sys.stdout, sys.stderr, arguments.format
+    )
+    execution.finish(sys.stdout, values, arguments.format, prepared.plan)
     outcome = execution.aggregate(values)
     return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
 

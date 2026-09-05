@@ -1,5 +1,7 @@
 """Run the explicit composed Source Armenian speech-to-English pipeline."""
 
+from __future__ import annotations
+
 import importlib
 import json
 import os
@@ -96,6 +98,48 @@ class Plan:
     text: Backend
 
 
+@dataclass(frozen=True)
+class Request:
+    """Hold unresolved command input and configuration."""
+
+    route: str
+    fused: str
+    speech: str
+    text: str
+    configured: Route
+    source: str
+    target: str
+    audio: str
+    root: Path
+    verbose: bool
+
+
+@dataclass(frozen=True)
+class Prepared:
+    """Hold the validated plan, snapshot, and decoded input."""
+
+    plan: Plan
+    path: Path
+    segments: tuple[array[float], ...]
+
+
+@dataclass(frozen=True)
+class Loaded:
+    """Hold both loaded stage implementations and their runtime."""
+
+    backend: Runtime
+    recognizer: object
+    translator: object
+
+
+@dataclass(frozen=True)
+class Attempt:
+    """Hold one segment result and any fatal diagnostic."""
+
+    result: Result
+    diagnostic: str
+
+
 class Runtime(Protocol):
     """Describe the lazily imported heavyweight composed backend module."""
 
@@ -127,6 +171,32 @@ def runtime() -> Runtime:
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
     return cast(Runtime, importlib.import_module("caraway.runtime"))
+
+
+def prepare(request: Request) -> Prepared:
+    """Validate the complete request before loading either model."""
+    source = translation.language(request.source)
+    target = translation.language(request.target)
+    audio = transcription.read(request.audio)
+    resolved = plan(
+        request.route,
+        request.fused,
+        request.speech,
+        request.text,
+        request.configured,
+        source,
+        target,
+    )
+    path = transcription.validate(request.root, request.verbose)
+    segments = transcription.decode(audio)
+    return Prepared(resolved, path, segments)
+
+
+def load(prepared: Prepared, backend: Runtime) -> Loaded:
+    """Load both implementations required by a validated plan."""
+    recognizer = backend.recognize(prepared.path)
+    translator = backend.load(prepared.path)
+    return Loaded(backend, recognizer, translator)
 
 
 def plan(
@@ -203,6 +273,35 @@ def skip(speech: transcription.Result) -> Result:
     return Result(speech.outcome, "", speech.text, problems)
 
 
+def attempt(audio: array[float], prepared: Prepared, loaded: Loaded) -> Attempt:
+    """Process one independently recoverable composed segment."""
+    try:
+        recognized = loaded.backend.transcribe(
+            loaded.recognizer, prepared.plan.source, audio
+        )
+    except Exception as error:
+        problem = Issue(
+            "speech_to_text", "transcription_failed", "speech transcription failed"
+        )
+        diagnostic = f"transcription_failed: speech transcription failed: {error}"
+        return Attempt(Result("failed", "", "", (problem,)), diagnostic)
+    if not recognized.text:
+        return Attempt(skip(recognized), "")
+    try:
+        generated = loaded.backend.generate(
+            loaded.translator,
+            prepared.plan.source,
+            prepared.plan.target,
+            recognized.text,
+        )
+        result = combine(recognized, loaded.backend.resolve(generated))
+        return Attempt(result, "")
+    except Exception as error:
+        problem = Issue("text_to_text", "translation_failed", "text translation failed")
+        diagnostic = f"translation_failed: text translation failed: {error}"
+        return Attempt(Result("failed", "", recognized.text, (problem,)), diagnostic)
+
+
 def aggregate(results: tuple[Result, ...]) -> Outcome:
     """Combine composed segment outcomes into one command outcome."""
     if any(result.outcome == "failed" for result in results):
@@ -276,6 +375,29 @@ def write(stream: TextIO, result: Result, index: int, representation: Format) ->
     )
     stream.flush()
     return True
+
+
+def execute(
+    prepared: Prepared,
+    loaded: Loaded,
+    output: TextIO,
+    diagnostics: TextIO,
+    representation: Format,
+) -> tuple[Result, ...]:
+    """Execute and stream the prepared segments until completion or failure."""
+    results: list[Result] = []
+    for index, audio in enumerate(prepared.segments):
+        attempted = attempt(audio, prepared, loaded)
+        if attempted.diagnostic:
+            print(attempted.diagnostic, file=diagnostics)
+        results.append(attempted.result)
+        write(output, attempted.result, index, representation)
+        if attempted.result.outcome in ("degraded", "skipped"):
+            for problem in attempted.result.issues:
+                print(f"{problem.code}: {problem.message}", file=diagnostics)
+        if attempted.result.outcome == "failed":
+            break
+    return tuple(results)
 
 
 def finish(
