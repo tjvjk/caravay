@@ -28,7 +28,7 @@ def invoke(
     environment["CACHE_DIR"] = str(home / f"չթույլատրված-{uuid4()}")
     if additions is not None:
         environment.update(additions)
-    executable = Path(sys.executable).with_name("caraway")
+    executable = str(Path(sys.executable).with_name("caraway"))
     command = (
         (executable, *arguments)
         if network
