@@ -112,6 +112,7 @@ class Request:
     audio: str
     root: Path
     verbose: bool
+    hashes: int
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,7 @@ class Prepared:
     plan: Plan
     path: Path
     segments: tuple[array[float], ...]
+    hashes: int
 
 
 @dataclass(frozen=True)
@@ -148,7 +150,11 @@ class Runtime(Protocol):
         ...
 
     def transcribe(
-        self, backend: object, source: str, audio: array[float]
+        self,
+        backend: object,
+        source: str,
+        audio: array[float],
+        hashes: int,
     ) -> transcription.Result:
         """Transcribe one audio segment."""
         ...
@@ -189,7 +195,7 @@ def prepare(request: Request) -> Prepared:
     )
     path = transcription.validate(request.root, request.verbose)
     segments = transcription.decode(audio)
-    return Prepared(resolved, path, segments)
+    return Prepared(resolved, path, segments, request.hashes)
 
 
 def load(prepared: Prepared, backend: Runtime) -> Loaded:
@@ -262,7 +268,7 @@ def combine(speech: transcription.Result, translated: translation.Result) -> Res
         if speech.outcome == "degraded" and translated.outcome == "completed"
         else translated.outcome
     )
-    return Result(outcome, translated.text, speech.text, problems)
+    return Result(outcome, translated.text, speech.transcript, problems)
 
 
 def skip(speech: transcription.Result) -> Result:
@@ -270,14 +276,14 @@ def skip(speech: transcription.Result) -> Result:
     problems = tuple(
         issue(value.stage, value.code, value.message) for value in speech.issues
     )
-    return Result(speech.outcome, "", speech.text, problems)
+    return Result(speech.outcome, "", speech.transcript, problems)
 
 
 def attempt(audio: array[float], prepared: Prepared, loaded: Loaded) -> Attempt:
     """Process one independently recoverable composed segment."""
     try:
         recognized = loaded.backend.transcribe(
-            loaded.recognizer, prepared.plan.source, audio
+            loaded.recognizer, prepared.plan.source, audio, prepared.hashes
         )
     except Exception as error:
         problem = Issue(
@@ -299,7 +305,9 @@ def attempt(audio: array[float], prepared: Prepared, loaded: Loaded) -> Attempt:
     except Exception as error:
         problem = Issue("text_to_text", "translation_failed", "text translation failed")
         diagnostic = f"translation_failed: text translation failed: {error}"
-        return Attempt(Result("failed", "", recognized.text, (problem,)), diagnostic)
+        return Attempt(
+            Result("failed", "", recognized.transcript, (problem,)), diagnostic
+        )
 
 
 def aggregate(results: tuple[Result, ...]) -> Outcome:

@@ -62,6 +62,9 @@ uv run caraway transcribe --format jsonl armenian.m4a
 ```
 
 Each completed audio segment is flushed to stdout as soon as it is ready.
+Speech commands reject generated `#err`/`#er` markers and hash runs of eight or
+more characters. Use `--artifact-hash-threshold` after `transcribe`, `run`, or
+`live` to tune the hash-run threshold from 2 through 256.
 
 Run the explicit composed speech-to-text and text-to-text plan to produce English
 while retaining Source Armenian transcripts in JSONL output:
@@ -70,6 +73,26 @@ while retaining Source Armenian transcripts in JSONL output:
 uv run caraway run armenian.wav
 uv run caraway run --format jsonl armenian.m4a
 ```
+
+Translate live raw PCM from a paced producer without changing the finite-file
+commands:
+
+```console
+ffmpeg -re -i armenian.wav -f f32le -ac 1 -ar 16000 pipe:1 | uv run caraway live --input-format f32le -
+```
+
+Live input is little-endian Float32 mono PCM at 16 kHz. The defaults close speech
+after 600 ms of silence, cap a segment at 8 seconds, defer speech shorter than
+200 ms, and allow a 30-second bounded input backlog. The corresponding options
+can tune those timing bounds without changing language or backend routing. A full
+backlog is reported as `overload` and exits unsuccessfully; samples are never
+silently dropped. EOF finalizes remaining speech once and discards silence.
+
+Each text result is flushed as one English line. JSONL adds source sample positions,
+the Source Armenian transcript, end-to-end latency, maximum backlog, and a terminal
+reason (`clean_eof`, `interruption`, `overload`, or `failure`). SIGINT cancels the
+current work, preserves already emitted output, writes an interruption terminal
+record in JSONL mode, and exits with status 130. A broken input pipe is a failure.
 
 Backend diagnostics are hidden by default; pass `--verbose` after a processing
 command to inspect model-loading details.
