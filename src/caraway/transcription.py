@@ -25,6 +25,7 @@ from caraway.translation import Format, Outcome, ValidationError
 Stage = Literal["speech_to_text"]
 RATE: Final = 16_000
 SPAN: Final = RATE * 10
+LIMIT: Final = 256
 
 
 class IssueDocument(TypedDict):
@@ -189,9 +190,9 @@ def decode(path: Path) -> tuple[array[float], ...]:
     )
 
 
-def resolve(generated: str) -> Result:
+def resolve(generated: str, limited: bool) -> Result:
     """Map generated speech text and repetition damage to an outcome."""
-    text = trim(generated.strip())
+    text = trim(generated.strip(), limited)
     if text != generated.strip():
         problem = Issue(
             "speech_to_text", "repetition", "repeating transcript suffix was removed"
