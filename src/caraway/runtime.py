@@ -14,7 +14,8 @@ from transformers import (
 )
 
 from caraway import transcription
-from caraway.translation import Issue, Result, ValidationError, trim
+from caraway.repetition import trim
+from caraway.translation import Issue, Result, ValidationError
 
 
 @dataclass(frozen=True)
