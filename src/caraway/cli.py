@@ -7,7 +7,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import cast
 
-from caraway import execution, transcription
+from caraway import execution, live, transcription
 from caraway.models import DownloadError, DownloadLockError, download, inspect
 from caraway.settings import InvalidConfigError, Settings, load
 from caraway.translation import (
@@ -66,6 +66,22 @@ def parser() -> argparse.ArgumentParser:
     composed.add_argument("--format", choices=FORMAT, default="text")
     composed.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
     composed.add_argument("--verbose", action="store_true")
+    streaming = commands.add_parser("live")
+    streaming.add_argument("input")
+    streaming.add_argument("--input-format", required=True, choices=("f32le",))
+    streaming.add_argument("--source", default="hye")
+    streaming.add_argument("--target", default="eng")
+    streaming.add_argument("--speech-backend", dest="speech", default="")
+    streaming.add_argument("--translation-backend", dest="translation", default="")
+    streaming.add_argument("--format", choices=FORMAT, default="text")
+    streaming.add_argument("--silence-ms", type=int, default=live.SILENCE_MS)
+    streaming.add_argument(
+        "--max-segment-seconds", type=float, default=live.MAX_SECONDS
+    )
+    streaming.add_argument("--min-segment-ms", type=int, default=live.MIN_MS)
+    streaming.add_argument("--buffer-seconds", type=float, default=live.BUFFER_SECONDS)
+    streaming.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
+    streaming.add_argument("--verbose", action="store_true")
     return result
 
 
@@ -244,6 +260,64 @@ def run(arguments: argparse.Namespace, config: Settings) -> int:
     return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
 
 
+def stream(arguments: argparse.Namespace, config: Settings) -> int:
+    """Validate and execute the bounded live PCM translation pipeline."""
+    try:
+        if arguments.input != "-" or sys.stdin.isatty():
+            raise ValidationError(
+                "invalid_input: live requires explicit non-interactive stdin -"
+            )
+        settings = live.options(
+            arguments.silence_ms,
+            arguments.max_segment_seconds,
+            arguments.min_segment_ms,
+            arguments.buffer_seconds,
+        )
+        source = language(arguments.source)
+        target = language(arguments.target)
+        plan = execution.plan(
+            "composed",
+            "",
+            arguments.speech,
+            arguments.translation,
+            config.commands.run,
+            source,
+            target,
+        )
+        path = transcription.validate(config.cache_dir, arguments.verbose)
+        prepared = execution.Prepared(plan, path, ())
+    except (ValidationError, ValueError) as error:
+        print(error, file=sys.stderr)
+        return 2
+    capture = live.capture(sys.stdin.buffer, settings)
+    backend = execution.runtime()
+    try:
+        loaded = execution.load(prepared, backend)
+    except Exception as error:
+        print(f"execution_failed: model loading failed: {error}", file=sys.stderr)
+        return 1
+    try:
+        results, terminal = live.execute(
+            capture,
+            sys.stdout,
+            sys.stderr,
+            prepared,
+            loaded,
+            settings,
+            arguments.format,
+        )
+    except KeyboardInterrupt:
+        live.terminal(
+            sys.stdout, arguments.format, plan, (), live.Terminal("interruption", 0)
+        )
+        return 130
+    live.terminal(sys.stdout, arguments.format, plan, results, terminal)
+    if terminal.completion in ("overload", "failure"):
+        return 1
+    outcome = execution.aggregate(results)
+    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
+
+
 def main() -> int:
     """Run the Caraway command-line interface."""
     cast(io.TextIOWrapper, sys.stdin).reconfigure(encoding="utf-8", errors="strict")
@@ -269,6 +343,8 @@ def main() -> int:
         return transcribe(arguments, config)
     if arguments.command == "run":
         return run(arguments, config)
+    if arguments.command == "live":
+        return stream(arguments, config)
     if arguments.action == "status":
         state = inspect(config.cache_dir)
         print(state)
