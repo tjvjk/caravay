@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import select
 import subprocess
 import sys
@@ -80,9 +81,20 @@ def test_paced_live_audio_emits_before_capture_finishes() -> None:
     Path(os.environ["CARAWAY_LIVE_REPORT"]).write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+    artifact = re.compile(r"(?<![\w#])#(?:err|er)(?![\w#])|#{8,}")
+    damaged = tuple(
+        record
+        for record in segments
+        if artifact.search(record.get("source_transcript") or "")
+    )
     assert (
         consumer.returncode,
-        bool(segments),
+        len(segments),
         early,
         terminal["completion"],
-    ) == (0, True, True, "clean_eof"), "paced live acceptance was not useful and live"
+        bool(damaged),
+        all(not artifact.search(record.get("text") or "") for record in segments),
+        all(record["outcome"] in ("degraded", "skipped") for record in damaged),
+    ) == (3, 39, True, "clean_eof", True, True, True), (
+        "paced live acceptance leaked or concealed generation artifacts"
+    )

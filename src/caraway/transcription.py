@@ -17,6 +17,7 @@ from typing import (
     cast,
 )
 
+from caraway.artifacts import HASHES, remove, useful
 from caraway.models import inspect
 from caraway.repetition import trim
 from caraway.settings import Backend, Settings
@@ -95,6 +96,7 @@ class Result:
     outcome: Outcome
     text: str
     issues: tuple[Issue, ...]
+    transcript: str = ""
 
 
 class Runtime(Protocol):
@@ -108,7 +110,13 @@ class Runtime(Protocol):
         """Load the pinned speech model once."""
         ...
 
-    def transcribe(self, backend: object, source: str, audio: array[float]) -> Result:
+    def transcribe(
+        self,
+        backend: object,
+        source: str,
+        audio: array[float],
+        hashes: int,
+    ) -> Result:
         """Transcribe one audio segment."""
         ...
 
@@ -190,20 +198,42 @@ def decode(path: Path) -> tuple[array[float], ...]:
     )
 
 
-def resolve(generated: str, limited: bool) -> Result:
+def resolve(generated: str, limited: bool, hashes: int = HASHES) -> Result:
     """Map generated speech text and repetition damage to an outcome."""
-    text = trim(generated.strip(), limited)
-    if text != generated.strip():
-        problem = Issue(
-            "speech_to_text", "repetition", "repeating transcript suffix was removed"
+    transcript = generated.strip()
+    repeated = trim(transcript, limited)
+    text = remove(repeated, hashes)
+    problems: tuple[Issue, ...] = ()
+    if repeated != transcript:
+        problems += (
+            Issue(
+                "speech_to_text",
+                "repetition",
+                "repeating transcript suffix was removed",
+            ),
         )
-        return Result("degraded" if text else "skipped", text, (problem,))
+    if text != repeated:
+        problems += (
+            Issue(
+                "speech_to_text",
+                "generation_artifact",
+                "generation artifact was removed from transcript",
+            ),
+        )
+    if problems:
+        retained = text if useful(text) else ""
+        return Result(
+            "degraded" if retained else "skipped",
+            retained,
+            problems,
+            transcript,
+        )
     if not text:
         problem = Issue(
             "speech_to_text", "empty_output", "transcription produced no useful text"
         )
-        return Result("skipped", "", (problem,))
-    return Result("completed", text, ())
+        return Result("skipped", "", (problem,), transcript)
+    return Result("completed", text, (), transcript)
 
 
 def aggregate(results: tuple[Result, ...]) -> Outcome:
@@ -340,6 +370,11 @@ def load(path: Path) -> object:
     return runtime().recognize(path)
 
 
-def transcribe(backend: object, source: str, audio: array[float]) -> Result:
+def transcribe(
+    backend: object,
+    source: str,
+    audio: array[float],
+    hashes: int = HASHES,
+) -> Result:
     """Transcribe one audio segment offline on MPS with FP16."""
-    return runtime().transcribe(backend, source, audio)
+    return runtime().transcribe(backend, source, audio, hashes)

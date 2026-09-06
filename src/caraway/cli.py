@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import cast
 
 from caraway import execution, live, transcription
+from caraway.artifacts import HASHES, threshold
 from caraway.models import DownloadError, DownloadLockError, download, inspect
 from caraway.settings import InvalidConfigError, Settings, load
 from caraway.translation import (
@@ -55,6 +56,7 @@ def parser() -> argparse.ArgumentParser:
     speech.add_argument("--format", choices=FORMAT, default="text")
     speech.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
     speech.add_argument("--verbose", action="store_true")
+    speech.add_argument("--artifact-hash-threshold", type=int, default=HASHES)
     composed = commands.add_parser("run")
     composed.add_argument("audio")
     composed.add_argument("--source", default="hye")
@@ -66,6 +68,7 @@ def parser() -> argparse.ArgumentParser:
     composed.add_argument("--format", choices=FORMAT, default="text")
     composed.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
     composed.add_argument("--verbose", action="store_true")
+    composed.add_argument("--artifact-hash-threshold", type=int, default=HASHES)
     streaming = commands.add_parser("live")
     streaming.add_argument("input")
     streaming.add_argument("--input-format", required=True, choices=("f32le",))
@@ -82,6 +85,7 @@ def parser() -> argparse.ArgumentParser:
     streaming.add_argument("--buffer-seconds", type=float, default=live.BUFFER_SECONDS)
     streaming.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
     streaming.add_argument("--verbose", action="store_true")
+    streaming.add_argument("--artifact-hash-threshold", type=int, default=HASHES)
     return result
 
 
@@ -159,6 +163,7 @@ def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
     """Validate and execute one offline audio transcription."""
     try:
         source = language(arguments.source)
+        hashes = threshold(arguments.artifact_hash_threshold)
         audio = transcription.read(arguments.audio)
         backend = transcription.capability(
             arguments.backend or config.commands.transcribe.backend, source
@@ -185,7 +190,7 @@ def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
         return 1
     for index, segment in enumerate(segments):
         try:
-            result = transcription.transcribe(loaded, source, segment)
+            result = transcription.transcribe(loaded, source, segment, hashes)
         except Exception as error:
             print(
                 f"transcription_failed: speech transcription failed: {error}",
@@ -230,6 +235,7 @@ def run(arguments: argparse.Namespace, config: Settings) -> int:
                 arguments.audio,
                 config.cache_dir,
                 arguments.verbose,
+                threshold(arguments.artifact_hash_threshold),
             )
         )
     except ValidationError as error:
@@ -275,6 +281,7 @@ def stream(arguments: argparse.Namespace, config: Settings) -> int:
         )
         source = language(arguments.source)
         target = language(arguments.target)
+        hashes = threshold(arguments.artifact_hash_threshold)
         plan = execution.plan(
             "composed",
             "",
@@ -285,7 +292,7 @@ def stream(arguments: argparse.Namespace, config: Settings) -> int:
             target,
         )
         path = transcription.validate(config.cache_dir, arguments.verbose)
-        prepared = execution.Prepared(plan, path, ())
+        prepared = execution.Prepared(plan, path, (), hashes)
     except (ValidationError, ValueError) as error:
         print(error, file=sys.stderr)
         return 2
