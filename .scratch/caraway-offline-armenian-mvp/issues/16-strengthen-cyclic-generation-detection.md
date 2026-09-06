@@ -25,3 +25,12 @@ cycle from the current exact-suffix guard.
 - [ ] The fixed five-minute Source Armenian corpus emits none of the observed raw
       cyclic suffixes while retaining useful text before each cycle.
 
+## Comments
+
+### 2026-09-06 implementation verification
+
+Ran the packaged backend offline on the fixed five-minute corpus with
+`caraway --quiet transcribe --format jsonl`. All 30 segments were attempted:
+23 completed, 7 degraded for `repetition`, 0 skipped, and 0 failed. The observed
+raw `ծխի`, `ոսկե`, `նայեք`, and `մինա` cyclic suffixes were absent,
+while the useful text preceding each detected cycle was retained.

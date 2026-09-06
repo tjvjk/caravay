@@ -330,7 +330,8 @@ class SeamlessM4Tv2ForTextToText:
         if options.get("tgt_lang") == "hye" and options.get("max_new_tokens") != 256:
             raise RuntimeError("unbounded speech generation")
         SeamlessM4Tv2ForTextToText.generated += 1
-        return [[1]]
+        length = 256 if os.environ.get("CARAWAY_RUNTIME_LIMITED") == "1" else 1
+        return [[1] * length]
 
 class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2ForTextToText):
     pass
@@ -887,10 +888,10 @@ def test_transcribe_truncates_a_multiword_cycle_at_the_generation_limit(
         "--format",
         "jsonl",
         str(source),
-        additions=speech(
-            tmp_path,
-            ("Սկիզբ նայեք մինա նայեք մինա նայեք",),
-        ),
+        additions={
+            **speech(tmp_path, ("Սկիզբ նայեք մինա նայեք մինա նայեք",)),
+            "CARAWAY_RUNTIME_LIMITED": "1",
+        },
     )
     record = json.loads(result.stdout.splitlines()[0])
     assert (result.returncode, record["outcome"], record["text"]) == (
@@ -898,6 +899,23 @@ def test_transcribe_truncates_a_multiword_cycle_at_the_generation_limit(
         "degraded",
         "Սկիզբ",
     ), "generation-limit cutoff concealed a multiword cycle"
+
+
+def test_transcribe_preserves_a_partial_cycle_below_the_generation_limit(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    result = transcribe(
+        home,
+        str(source),
+        additions=speech(tmp_path, ("Սկիզբ նայեք մինա նայեք մինա նայեք",)),
+    )
+    assert (result.returncode, result.stdout) == (
+        0,
+        "Սկիզբ նայեք մինա նայեք մինա նայեք\n",
+    ), "partial repetition below the generation limit was removed"
 
 
 def test_transcribe_removes_bounded_armenian_cycles_and_continues(

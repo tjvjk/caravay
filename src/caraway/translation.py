@@ -154,6 +154,24 @@ def translate(path: Path, source: str, target: str, text: str) -> Result:
     return runtime().translate(path, source, target, text)
 
 
+def trim(text: str) -> str:
+    """Remove a suffix made from three or more identical generated phrases."""
+    matches = tuple(re.finditer(r"\S+", text))
+    words = tuple(value.group() for value in matches)
+    for size in range(1, len(words) // 3 + 1):
+        suffix = words[-size:]
+        repeats = 1
+        while (
+            size * (repeats + 1) <= len(words)
+            and words[-size * (repeats + 1) : -size * repeats] == suffix
+        ):
+            repeats += 1
+        if repeats >= 3:
+            start = matches[len(words) - size * repeats].start()
+            return text[:start].rstrip()
+    return text
+
+
 def issue(value: Issue) -> IssueDocument:
     """Serialize one issue for schema version one."""
     return {"stage": value.stage, "code": value.code, "message": value.message}
