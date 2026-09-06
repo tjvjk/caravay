@@ -3,16 +3,19 @@
 import argparse
 import io
 import sys
+from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 from typing import cast
 
-from caraway import execution, transcription
+from caraway import execution, live, transcription
+from caraway.artifacts import HASHES, threshold
 from caraway.models import DownloadError, DownloadLockError, download, inspect
 from caraway.settings import InvalidConfigError, Settings, load
 from caraway.translation import (
     FORMAT,
     Issue,
+    Outcome,
     Result,
     ValidationError,
     capability,
@@ -22,6 +25,14 @@ from caraway.translation import (
     translate,
     validate,
 )
+
+
+@dataclass(frozen=True)
+class Setup:
+    """Hold validated live execution input behind one preparation interface."""
+
+    prepared: execution.Prepared
+    options: live.Options
 
 
 class Input(Enum):
@@ -55,6 +66,7 @@ def parser() -> argparse.ArgumentParser:
     speech.add_argument("--format", choices=FORMAT, default="text")
     speech.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
     speech.add_argument("--verbose", action="store_true")
+    speech.add_argument("--artifact-hash-threshold", type=int, default=HASHES)
     composed = commands.add_parser("run")
     composed.add_argument("audio")
     composed.add_argument("--source", default="hye")
@@ -66,6 +78,24 @@ def parser() -> argparse.ArgumentParser:
     composed.add_argument("--format", choices=FORMAT, default="text")
     composed.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
     composed.add_argument("--verbose", action="store_true")
+    composed.add_argument("--artifact-hash-threshold", type=int, default=HASHES)
+    streaming = commands.add_parser("live")
+    streaming.add_argument("input")
+    streaming.add_argument("--input-format", required=True, choices=("f32le",))
+    streaming.add_argument("--source", default="hye")
+    streaming.add_argument("--target", default="eng")
+    streaming.add_argument("--speech-backend", dest="speech", default="")
+    streaming.add_argument("--translation-backend", dest="translation", default="")
+    streaming.add_argument("--format", choices=FORMAT, default="text")
+    streaming.add_argument("--silence-ms", type=int, default=live.SILENCE_MS)
+    streaming.add_argument(
+        "--max-segment-seconds", type=float, default=live.MAX_SECONDS
+    )
+    streaming.add_argument("--min-segment-ms", type=int, default=live.MIN_MS)
+    streaming.add_argument("--buffer-seconds", type=float, default=live.BUFFER_SECONDS)
+    streaming.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
+    streaming.add_argument("--verbose", action="store_true")
+    streaming.add_argument("--artifact-hash-threshold", type=int, default=HASHES)
     return result
 
 
@@ -94,6 +124,11 @@ def read(value: str | Input) -> str:
         raise ValidationError(
             "invalid_input: input is not readable UTF-8 text"
         ) from error
+
+
+def status(outcome: Outcome) -> int:
+    """Map one aggregate processing outcome to its stable exit status."""
+    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
 
 
 def process(arguments: argparse.Namespace, config: Settings) -> int:
@@ -136,13 +171,14 @@ def process(arguments: argparse.Namespace, config: Settings) -> int:
         for problem in result.issues:
             print(f"{problem.code}: {problem.message}", file=sys.stderr)
     emit(sys.stdout, result, arguments.format, source, target, backend)
-    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[result.outcome]
+    return status(result.outcome)
 
 
 def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
     """Validate and execute one offline audio transcription."""
     try:
         source = language(arguments.source)
+        hashes = threshold(arguments.artifact_hash_threshold)
         audio = transcription.read(arguments.audio)
         backend = transcription.capability(
             arguments.backend or config.commands.transcribe.backend, source
@@ -169,7 +205,7 @@ def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
         return 1
     for index, segment in enumerate(segments):
         try:
-            result = transcription.transcribe(loaded, source, segment)
+            result = transcription.transcribe(loaded, source, segment, hashes)
         except Exception as error:
             print(
                 f"transcription_failed: speech transcription failed: {error}",
@@ -196,7 +232,7 @@ def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
     values = tuple(results)
     transcription.finish(sys.stdout, values, arguments.format, source, backend)
     outcome = transcription.aggregate(values)
-    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
+    return status(outcome)
 
 
 def run(arguments: argparse.Namespace, config: Settings) -> int:
@@ -214,6 +250,7 @@ def run(arguments: argparse.Namespace, config: Settings) -> int:
                 arguments.audio,
                 config.cache_dir,
                 arguments.verbose,
+                threshold(arguments.artifact_hash_threshold),
             )
         )
     except ValidationError as error:
@@ -241,7 +278,114 @@ def run(arguments: argparse.Namespace, config: Settings) -> int:
     )
     execution.finish(sys.stdout, values, arguments.format, prepared.plan)
     outcome = execution.aggregate(values)
-    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
+    return status(outcome)
+
+
+def prepare(arguments: argparse.Namespace, config: Settings) -> Setup:
+    """Validate live input and prepare its bounded execution plan."""
+    if arguments.input != "-" or sys.stdin.isatty():
+        raise ValidationError(
+            "invalid_input: live requires explicit non-interactive stdin -"
+        )
+    options = live.options(
+        arguments.silence_ms,
+        arguments.max_segment_seconds,
+        arguments.min_segment_ms,
+        arguments.buffer_seconds,
+    )
+    source = language(arguments.source)
+    target = language(arguments.target)
+    hashes = threshold(arguments.artifact_hash_threshold)
+    plan = execution.plan(
+        "composed",
+        "",
+        arguments.speech,
+        arguments.translation,
+        config.commands.run,
+        source,
+        target,
+    )
+    path = transcription.validate(config.cache_dir, arguments.verbose)
+    return Setup(execution.Prepared(plan, path, (), hashes), options)
+
+
+def interrupt(
+    arguments: argparse.Namespace,
+    setup: Setup,
+    capture: live.Capture,
+) -> int:
+    """Settle capture and serialize an interrupted live model load."""
+    live.settle(capture, sys.stdin.buffer)
+    live.terminal(
+        sys.stdout,
+        arguments.format,
+        setup.prepared.plan,
+        (),
+        live.Terminal("interruption", 0),
+    )
+    return 130
+
+
+def fail(
+    arguments: argparse.Namespace,
+    setup: Setup,
+    capture: live.Capture,
+    error: Exception,
+) -> int:
+    """Settle capture and serialize a failed live model load."""
+    live.settle(capture, sys.stdin.buffer)
+    print(f"execution_failed: model loading failed: {error}", file=sys.stderr)
+    live.terminal(
+        sys.stdout,
+        arguments.format,
+        setup.prepared.plan,
+        (),
+        live.Terminal("failure", 0),
+    )
+    return 1
+
+
+def finish(
+    arguments: argparse.Namespace,
+    setup: Setup,
+    results: tuple[execution.Result, ...],
+    terminal: live.Terminal,
+) -> int:
+    """Serialize live completion and return its stable exit status."""
+    live.terminal(sys.stdout, arguments.format, setup.prepared.plan, results, terminal)
+    if terminal.completion in ("overload", "failure"):
+        return 1
+    if terminal.completion == "interruption":
+        return 130
+    return status(execution.aggregate(results))
+
+
+def stream(arguments: argparse.Namespace, config: Settings) -> int:
+    """Validate and execute the bounded live PCM translation pipeline."""
+    try:
+        setup = prepare(arguments, config)
+    except (ValidationError, ValueError) as error:
+        print(error, file=sys.stderr)
+        return 2
+    capture = live.capture(sys.stdin.buffer, setup.options)
+    backend = execution.runtime()
+    try:
+        loaded = execution.load(setup.prepared, backend)
+    except KeyboardInterrupt:
+        return interrupt(arguments, setup, capture)
+    except Exception as error:
+        return fail(arguments, setup, capture, error)
+    results, terminal = live.execute(
+        capture,
+        sys.stdin.buffer,
+        sys.stdout,
+        sys.stderr,
+        setup.prepared,
+        loaded,
+        setup.options,
+        arguments.format,
+    )
+    return finish(arguments, setup, results, terminal)
 
 
 def main() -> int:
@@ -269,6 +413,8 @@ def main() -> int:
         return transcribe(arguments, config)
     if arguments.command == "run":
         return run(arguments, config)
+    if arguments.command == "live":
+        return stream(arguments, config)
     if arguments.action == "status":
         state = inspect(config.cache_dir)
         print(state)
