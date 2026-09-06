@@ -330,7 +330,7 @@ class SeamlessM4Tv2ForTextToText:
         if options.get("tgt_lang") == "hye" and options.get("max_new_tokens") != 256:
             raise RuntimeError("unbounded speech generation")
         SeamlessM4Tv2ForTextToText.generated += 1
-        length = 256 if os.environ.get("CARAWAY_RUNTIME_LIMITED") == "1" else 1
+        length = 257 if os.environ.get("CARAWAY_RUNTIME_LIMITED") == "1" else 1
         return [[1] * length]
 
 class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2ForTextToText):
@@ -916,6 +916,21 @@ def test_transcribe_preserves_a_partial_cycle_below_the_generation_limit(
         0,
         "Սկիզբ նայեք մինա նայեք մինա նայեք\n",
     ), "partial repetition below the generation limit was removed"
+
+
+def test_transcribe_preserves_distinct_punctuation_tokens(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    result = transcribe(
+        home,
+        str(source),
+        additions=speech(tmp_path, ("Ի՞նչ ! ? …",)),
+    )
+    assert (result.returncode, result.stdout) == (
+        0,
+        "Ի՞նչ ! ? …\n",
+    ), "distinct punctuation tokens were treated as a cycle"
 
 
 def test_transcribe_removes_bounded_armenian_cycles_and_continues(
