@@ -3,6 +3,7 @@
 import argparse
 import io
 import sys
+from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 from typing import cast
@@ -14,6 +15,7 @@ from caraway.settings import InvalidConfigError, Settings, load
 from caraway.translation import (
     FORMAT,
     Issue,
+    Outcome,
     Result,
     ValidationError,
     capability,
@@ -23,6 +25,14 @@ from caraway.translation import (
     translate,
     validate,
 )
+
+
+@dataclass(frozen=True)
+class Setup:
+    """Hold validated live execution input behind one preparation interface."""
+
+    prepared: execution.Prepared
+    options: live.Options
 
 
 class Input(Enum):
@@ -116,6 +126,11 @@ def read(value: str | Input) -> str:
         ) from error
 
 
+def status(outcome: Outcome) -> int:
+    """Map one aggregate processing outcome to its stable exit status."""
+    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
+
+
 def process(arguments: argparse.Namespace, config: Settings) -> int:
     """Validate and execute one offline text translation."""
     try:
@@ -156,7 +171,7 @@ def process(arguments: argparse.Namespace, config: Settings) -> int:
         for problem in result.issues:
             print(f"{problem.code}: {problem.message}", file=sys.stderr)
     emit(sys.stdout, result, arguments.format, source, target, backend)
-    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[result.outcome]
+    return status(result.outcome)
 
 
 def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
@@ -217,7 +232,7 @@ def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
     values = tuple(results)
     transcription.finish(sys.stdout, values, arguments.format, source, backend)
     outcome = transcription.aggregate(values)
-    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
+    return status(outcome)
 
 
 def run(arguments: argparse.Namespace, config: Settings) -> int:
@@ -263,73 +278,114 @@ def run(arguments: argparse.Namespace, config: Settings) -> int:
     )
     execution.finish(sys.stdout, values, arguments.format, prepared.plan)
     outcome = execution.aggregate(values)
-    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
+    return status(outcome)
+
+
+def prepare(arguments: argparse.Namespace, config: Settings) -> Setup:
+    """Validate live input and prepare its bounded execution plan."""
+    if arguments.input != "-" or sys.stdin.isatty():
+        raise ValidationError(
+            "invalid_input: live requires explicit non-interactive stdin -"
+        )
+    options = live.options(
+        arguments.silence_ms,
+        arguments.max_segment_seconds,
+        arguments.min_segment_ms,
+        arguments.buffer_seconds,
+    )
+    source = language(arguments.source)
+    target = language(arguments.target)
+    hashes = threshold(arguments.artifact_hash_threshold)
+    plan = execution.plan(
+        "composed",
+        "",
+        arguments.speech,
+        arguments.translation,
+        config.commands.run,
+        source,
+        target,
+    )
+    path = transcription.validate(config.cache_dir, arguments.verbose)
+    return Setup(execution.Prepared(plan, path, (), hashes), options)
+
+
+def interrupt(
+    arguments: argparse.Namespace,
+    setup: Setup,
+    capture: live.Capture,
+) -> int:
+    """Settle capture and serialize an interrupted live model load."""
+    live.settle(capture, sys.stdin.buffer)
+    live.terminal(
+        sys.stdout,
+        arguments.format,
+        setup.prepared.plan,
+        (),
+        live.Terminal("interruption", 0),
+    )
+    return 130
+
+
+def fail(
+    arguments: argparse.Namespace,
+    setup: Setup,
+    capture: live.Capture,
+    error: Exception,
+) -> int:
+    """Settle capture and serialize a failed live model load."""
+    live.settle(capture, sys.stdin.buffer)
+    print(f"execution_failed: model loading failed: {error}", file=sys.stderr)
+    live.terminal(
+        sys.stdout,
+        arguments.format,
+        setup.prepared.plan,
+        (),
+        live.Terminal("failure", 0),
+    )
+    return 1
+
+
+def finish(
+    arguments: argparse.Namespace,
+    setup: Setup,
+    results: tuple[execution.Result, ...],
+    terminal: live.Terminal,
+) -> int:
+    """Serialize live completion and return its stable exit status."""
+    live.terminal(sys.stdout, arguments.format, setup.prepared.plan, results, terminal)
+    if terminal.completion in ("overload", "failure"):
+        return 1
+    if terminal.completion == "interruption":
+        return 130
+    return status(execution.aggregate(results))
 
 
 def stream(arguments: argparse.Namespace, config: Settings) -> int:
     """Validate and execute the bounded live PCM translation pipeline."""
     try:
-        if arguments.input != "-" or sys.stdin.isatty():
-            raise ValidationError(
-                "invalid_input: live requires explicit non-interactive stdin -"
-            )
-        settings = live.options(
-            arguments.silence_ms,
-            arguments.max_segment_seconds,
-            arguments.min_segment_ms,
-            arguments.buffer_seconds,
-        )
-        source = language(arguments.source)
-        target = language(arguments.target)
-        hashes = threshold(arguments.artifact_hash_threshold)
-        plan = execution.plan(
-            "composed",
-            "",
-            arguments.speech,
-            arguments.translation,
-            config.commands.run,
-            source,
-            target,
-        )
-        path = transcription.validate(config.cache_dir, arguments.verbose)
-        prepared = execution.Prepared(plan, path, (), hashes)
+        setup = prepare(arguments, config)
     except (ValidationError, ValueError) as error:
         print(error, file=sys.stderr)
         return 2
-    capture = live.capture(sys.stdin.buffer, settings)
+    capture = live.capture(sys.stdin.buffer, setup.options)
     backend = execution.runtime()
     try:
-        loaded = execution.load(prepared, backend)
+        loaded = execution.load(setup.prepared, backend)
     except KeyboardInterrupt:
-        live.settle(capture, sys.stdin.buffer)
-        live.terminal(
-            sys.stdout, arguments.format, plan, (), live.Terminal("interruption", 0)
-        )
-        return 130
+        return interrupt(arguments, setup, capture)
     except Exception as error:
-        live.settle(capture, sys.stdin.buffer)
-        print(f"execution_failed: model loading failed: {error}", file=sys.stderr)
-        live.terminal(
-            sys.stdout, arguments.format, plan, (), live.Terminal("failure", 0)
-        )
-        return 1
+        return fail(arguments, setup, capture, error)
     results, terminal = live.execute(
         capture,
         sys.stdin.buffer,
         sys.stdout,
         sys.stderr,
-        prepared,
+        setup.prepared,
         loaded,
-        settings,
+        setup.options,
         arguments.format,
     )
-    live.terminal(sys.stdout, arguments.format, plan, results, terminal)
-    if terminal.completion in ("overload", "failure"):
-        return 1
-    if terminal.completion == "interruption":
-        return 130
-    outcome = execution.aggregate(results)
-    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
+    return finish(arguments, setup, results, terminal)
 
 
 def main() -> int:
