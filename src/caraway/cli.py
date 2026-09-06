@@ -293,27 +293,34 @@ def stream(arguments: argparse.Namespace, config: Settings) -> int:
     backend = execution.runtime()
     try:
         loaded = execution.load(prepared, backend)
-    except Exception as error:
-        print(f"execution_failed: model loading failed: {error}", file=sys.stderr)
-        return 1
-    try:
-        results, terminal = live.execute(
-            capture,
-            sys.stdout,
-            sys.stderr,
-            prepared,
-            loaded,
-            settings,
-            arguments.format,
-        )
     except KeyboardInterrupt:
+        live.settle(capture, sys.stdin.buffer)
         live.terminal(
             sys.stdout, arguments.format, plan, (), live.Terminal("interruption", 0)
         )
         return 130
+    except Exception as error:
+        live.settle(capture, sys.stdin.buffer)
+        print(f"execution_failed: model loading failed: {error}", file=sys.stderr)
+        live.terminal(
+            sys.stdout, arguments.format, plan, (), live.Terminal("failure", 0)
+        )
+        return 1
+    results, terminal = live.execute(
+        capture,
+        sys.stdin.buffer,
+        sys.stdout,
+        sys.stderr,
+        prepared,
+        loaded,
+        settings,
+        arguments.format,
+    )
     live.terminal(sys.stdout, arguments.format, plan, results, terminal)
     if terminal.completion in ("overload", "failure"):
         return 1
+    if terminal.completion == "interruption":
+        return 130
     outcome = execution.aggregate(results)
     return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
 

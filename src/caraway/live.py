@@ -18,7 +18,7 @@ FRAME: Final = 320
 SILENCE_MS: Final = 600
 MAX_SECONDS: Final = 8.0
 MIN_MS: Final = 200
-BUFFER_SECONDS: Final = 5.0
+BUFFER_SECONDS: Final = 30.0
 THRESHOLD: Final = 0.01
 Completion = Literal["clean_eof", "interruption", "overload", "failure"]
 
@@ -59,11 +59,6 @@ class Frame:
 
 
 @dataclass(frozen=True)
-class End:
-    """Mark orderly end of the PCM input queue."""
-
-
-@dataclass(frozen=True)
 class Segment:
     """Hold one finalized speech candidate and its source positions."""
 
@@ -85,9 +80,12 @@ class Terminal:
 class Capture:
     """Hold the independently draining bounded PCM input boundary."""
 
-    frames: queue.Queue[Frame | End]
+    frames: queue.Queue[Frame]
     overload: threading.Event
     failed: threading.Event
+    eof: threading.Event
+    stop: threading.Event
+    errors: list[str]
     peak: list[int]
     reader: threading.Thread
 
@@ -118,9 +116,12 @@ def speech(samples: array[float]) -> bool:
 
 def read(
     stream: BinaryIO,
-    frames: queue.Queue[Frame | End],
+    frames: queue.Queue[Frame],
     overload: threading.Event,
     failed: threading.Event,
+    eof: threading.Event,
+    stop: threading.Event,
+    errors: list[str],
     peak: list[int],
 ) -> bool:
     """Drain fragmented raw PCM input into a bounded frame queue."""
@@ -128,6 +129,8 @@ def read(
     position = 0
     try:
         while payload := stream.read(FRAME * 4):
+            if stop.is_set():
+                return False
             remainder += payload
             size = len(remainder) // 4 * 4
             values = array("f")
@@ -151,25 +154,45 @@ def read(
                 return False
             values = array("f")
             values.frombytes(remainder)
-            frames.put(Frame(position, values, time.monotonic()))
-        frames.put(End())
+            try:
+                frames.put_nowait(Frame(position, values, time.monotonic()))
+            except queue.Full:
+                overload.set()
+                return False
         return True
-    except OSError:
+    except (OSError, ValueError) as error:
+        errors.append(str(error))
         failed.set()
         return False
+    finally:
+        eof.set()
 
 
 def capture(source: BinaryIO, settings: Options) -> Capture:
     """Start draining live PCM before heavyweight model loading begins."""
-    frames: queue.Queue[Frame | End] = queue.Queue(settings.capacity)
+    frames: queue.Queue[Frame] = queue.Queue(settings.capacity)
     overload = threading.Event()
     failed = threading.Event()
+    eof = threading.Event()
+    stop = threading.Event()
+    errors: list[str] = []
     peak = [0]
     reader = threading.Thread(
-        target=read, args=(source, frames, overload, failed, peak), daemon=True
+        target=read,
+        args=(source, frames, overload, failed, eof, stop, errors, peak),
+        daemon=True,
     )
     reader.start()
-    return Capture(frames, overload, failed, peak, reader)
+    return Capture(frames, overload, failed, eof, stop, errors, peak, reader)
+
+
+def settle(capture: Capture, source: BinaryIO) -> bool:
+    """Stop capture and wait a bounded interval for its reader resource."""
+    capture.stop.set()
+    if capture.reader.is_alive():
+        source.close()
+    capture.reader.join(timeout=1)
+    return not capture.reader.is_alive()
 
 
 def close(
@@ -253,9 +276,10 @@ def write(
 
 
 def segments(
-    frames: queue.Queue[Frame | End],
+    frames: queue.Queue[Frame],
     overload: threading.Event,
     failed: threading.Event,
+    eof: threading.Event,
     settings: Options,
 ) -> Iterator[Segment | Terminal]:
     """Yield finalized candidates while inference runs between queue reads."""
@@ -272,23 +296,20 @@ def segments(
             yield Terminal("failure", 0)
             return
         try:
-            item = frames.get(timeout=0.05)
+            frame = frames.get(timeout=0.05)
         except queue.Empty:
-            continue
-        match item:
-            case End():
-                if candidate:
-                    final, pending = close(start, candidate, 0, ended, pending)
-                    pending = final if len(final.samples) < settings.minimum else None
-                    if pending is None:
-                        yield final
-                if pending is not None:
-                    yield pending
-                yield Terminal("clean_eof", 0)
-                return
-            case Frame():
-                frame = item
-                voiced = speech(frame.samples)
+            if not eof.is_set():
+                continue
+            if candidate:
+                final, pending = close(start, candidate, 0, ended, pending)
+                pending = final if len(final.samples) < settings.minimum else None
+                if pending is None:
+                    yield final
+            if pending is not None:
+                yield pending
+            yield Terminal("clean_eof", 0)
+            return
+        voiced = speech(frame.samples)
         if not candidate and not voiced:
             continue
         if not candidate:
@@ -330,6 +351,7 @@ def attempt(
 
 def execute(
     capture: Capture,
+    source: BinaryIO,
     output: TextIO,
     diagnostics: TextIO,
     prepared: execution.Prepared,
@@ -340,30 +362,41 @@ def execute(
     """Drain, segment, translate, and emit one bounded live PCM stream."""
     results: list[execution.Result] = []
     state = Terminal("clean_eof", 0)
-    for value in segments(capture.frames, capture.overload, capture.failed, settings):
-        match value:
-            case Terminal():
-                state = Terminal(value.completion, capture.peak[0])
+    try:
+        for value in segments(
+            capture.frames,
+            capture.overload,
+            capture.failed,
+            capture.eof,
+            settings,
+        ):
+            match value:
+                case Terminal():
+                    state = Terminal(value.completion, capture.peak[0])
+                    break
+                case Segment():
+                    result = attempt(
+                        value,
+                        prepared,
+                        loaded,
+                        output,
+                        diagnostics,
+                        representation,
+                        len(results),
+                    )
+            results.append(result)
+            if result.outcome == "failed":
+                state = Terminal("failure", capture.peak[0])
                 break
-            case Segment():
-                result = attempt(
-                    value,
-                    prepared,
-                    loaded,
-                    output,
-                    diagnostics,
-                    representation,
-                    len(results),
-                )
-        results.append(result)
-        if result.outcome == "failed":
-            state = Terminal("failure", capture.peak[0])
-            break
+    except KeyboardInterrupt:
+        state = Terminal("interruption", capture.peak[0])
     if state.completion == "overload":
         print(
             f"overload: live backlog exceeded {settings.capacity} frames",
             file=diagnostics,
         )
     if capture.failed.is_set():
-        print("invalid_input: live PCM input pipe failed", file=diagnostics)
+        detail = capture.errors[-1] if capture.errors else "unknown input error"
+        print(f"invalid_input: live PCM input pipe failed: {detail}", file=diagnostics)
+    settle(capture, source)
     return tuple(results), state
