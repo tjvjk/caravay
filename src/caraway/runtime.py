@@ -138,10 +138,13 @@ def transcribe(
         for name, value in inputs.items()
     }
     with torch.inference_mode():
-        tokens = speech.model.generate(**values, tgt_lang=source, max_new_tokens=256)
+        tokens = speech.model.generate(
+            **values, tgt_lang=source, max_new_tokens=transcription.LIMIT
+        )
     generated = speech.processor.decode(
         tokens[0],
         skip_special_tokens=True,
         clean_up_tokenization_spaces=False,
     )
-    return transcription.resolve(cast(str, generated))
+    limited = len(tokens[0]) >= transcription.LIMIT + 1
+    return transcription.resolve(cast(str, generated), limited)
