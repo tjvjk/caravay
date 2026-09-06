@@ -12,7 +12,8 @@ def normalize(token: str) -> str:
         start += 1
     while end > start and unicodedata.category(token[end - 1]).startswith("P"):
         end -= 1
-    return token[start:end]
+    value = token[start:end]
+    return value or token
 
 
 def trim(text: str, limited: bool) -> str:

@@ -146,5 +146,5 @@ def transcribe(
         skip_special_tokens=True,
         clean_up_tokenization_spaces=False,
     )
-    limited = len(tokens[0]) >= transcription.LIMIT
+    limited = len(tokens[0]) >= transcription.LIMIT + 1
     return transcription.resolve(cast(str, generated), limited)
