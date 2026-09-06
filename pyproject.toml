@@ -1,6 +1,6 @@
 [project]
 name = "caraway"
-version = "0.5.1"
+version = "0.6.0"
 description = "Offline Source Armenian language processing CLI"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"

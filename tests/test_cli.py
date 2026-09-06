@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 import wave
+from array import array
 from collections.abc import Mapping
 from pathlib import Path
 from uuid import uuid4
@@ -389,6 +390,186 @@ def run(
     cache = home / "Library" / "Caches" / "caraway"
     config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
     return invoke(home, "--config", str(config), "run", *arguments, additions=additions)
+
+
+def live(
+    home: Path,
+    samples: tuple[float, ...],
+    *arguments: str,
+    additions: Mapping[str, str] | None = None,
+) -> subprocess.CompletedProcess[bytes]:
+    """Invoke live translation with explicit raw PCM standard input."""
+    home.mkdir(parents=True, exist_ok=True)
+    config = home / f"կարգավորում-{uuid4()}.toml"
+    cache = home / "Library" / "Caches" / "caraway"
+    config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
+    environment = os.environ.copy()
+    environment["HOME"] = str(home)
+    if additions is not None:
+        environment.update(additions)
+    command = Path(sys.executable).with_name("caraway")
+    return subprocess.run(
+        (
+            command,
+            "--config",
+            config,
+            "live",
+            "--input-format",
+            "f32le",
+            *arguments,
+            "-",
+        ),
+        input=array("f", samples).tobytes(),
+        capture_output=True,
+        check=False,
+        env=environment,
+        timeout=5,
+    )
+
+
+def test_live_translates_one_pcm_utterance_at_eof(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    samples = (0.2,) * 8_000
+    result = live(home, samples, additions=speech(tmp_path, ("Բարեւ", "Hello")))
+    assert (result.returncode, result.stdout, result.stderr) == (
+        0,
+        b"Hello\n",
+        b"",
+    ), "live PCM speech was not translated at end of input"
+
+
+@pytest.mark.parametrize("arguments", ((), ("--input-format", "s16le", "-")))
+def test_live_rejects_an_invalid_input_contract_before_model_loading(
+    tmp_path: Path, arguments: tuple[str, ...]
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    additions = runtime(tmp_path)
+    additions["CARAWAY_RUNTIME_FAIL"] = "load"
+    result = invoke(home, "live", *arguments, additions=additions)
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "invalid live input reached model loading"
+    )
+
+
+def test_live_jsonl_preserves_sample_positions_and_clean_completion(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    samples = (0.2,) * 3_200 + (0.0,) * 9_600 + (0.3,) * 4_800
+    result = live(
+        home,
+        samples,
+        "--format",
+        "jsonl",
+        additions=speech(tmp_path, ("Առաջին", "First", "Երկրորդ", "Second")),
+    )
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (
+        result.returncode,
+        tuple(
+            (record["source_start_sample"], record["source_end_sample"])
+            for record in records[:-1]
+        ),
+        tuple(record["text"] for record in records[:-1]),
+        records[-1]["command"],
+        records[-1]["completion"],
+    ) == (
+        0,
+        ((0, 3_200), (12_800, 17_600)),
+        ("First", "Second"),
+        "live",
+        "clean_eof",
+    ), "live JSONL lost ordered sample positions or completion"
+
+
+def test_live_combines_short_speech_fragments_without_losing_samples(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    samples = (0.2,) * 1_600 + (0.0,) * 9_600 + (0.3,) * 2_400
+    result = live(
+        home,
+        samples,
+        additions=speech(tmp_path, ("Միասին", "Together")),
+    )
+    assert (result.returncode, result.stdout) == (0, b"Together\n"), (
+        "short live fragments were lost or attempted separately"
+    )
+
+
+def test_live_reports_bounded_buffer_overload(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = live(
+        home,
+        (0.2,) * 160_000,
+        "--buffer-seconds",
+        "0.02",
+        "--format",
+        "jsonl",
+        additions=speech(tmp_path, ("Չօգտագործված",)),
+    )
+    terminal = json.loads(result.stdout.splitlines()[-1])
+    assert (result.returncode, terminal["completion"], bool(result.stderr)) == (
+        1,
+        "overload",
+        True,
+    ), "live overload was silent or successful"
+
+
+def test_live_stops_after_a_fatal_segment(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    additions = speech(tmp_path, ("Չօգտագործված",))
+    additions["CARAWAY_RUNTIME_FAIL_INDEX"] = "0"
+    result = live(
+        home,
+        (0.2,) * 4_800,
+        "--format",
+        "jsonl",
+        additions=additions,
+    )
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (
+        result.returncode,
+        records[0]["outcome"],
+        records[-1]["completion"],
+    ) == (1, "failed", "failure"), "fatal live inference did not terminate the stream"
+
+
+def test_live_enforces_the_configured_maximum_speech_duration(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = live(
+        home,
+        (0.2,) * 12_800,
+        "--max-segment-seconds",
+        "0.4",
+        "--buffer-seconds",
+        "2",
+        additions=speech(tmp_path, ("Մեկ", "One", "Երկու", "Two")),
+    )
+    assert (result.returncode, result.stdout) == (0, b"One\nTwo\n"), (
+        "maximum live duration did not split continuous speech"
+    )
+
+
+def test_live_discards_silence_at_clean_eof(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = live(
+        home,
+        (0.0,) * 4_800,
+        additions=speech(tmp_path, ("Չօգտագործված",)),
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (4, b"", b""), (
+        "live EOF fabricated output from buffered silence"
+    )
 
 
 def test_run_emits_ordered_useful_english_segments(tmp_path: Path) -> None:
