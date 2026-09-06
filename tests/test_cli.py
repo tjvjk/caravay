@@ -283,6 +283,9 @@ class AutoProcessor:
                     f"type={type(options['audio'])}"
                 )
             return Batch(input_features=Tensor())
+        if expected := os.environ.get("CARAWAY_EXPECT_TEXT"):
+            if options.get("text") != expected:
+                raise RuntimeError("translation received damaged transcript")
         return Batch(options)
     def decode(self, tokens, *, skip_special_tokens, clean_up_tokenization_spaces):
         if clean_up_tokenization_spaces is not False:
@@ -638,18 +641,335 @@ def test_run_preserves_transcripts_and_resolved_plan_in_jsonl(
     ), "composed JSONL omitted its transcript or explicit plan"
 
 
+def test_run_marks_a_useful_generation_artifact_as_degraded(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    result = run(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions={
+            **speech(tmp_path, ("Բարև #err, աշխարհ", "Hello, world")),
+            "CARAWAY_EXPECT_TEXT": "Բարև  , աշխարհ",
+        },
+    )
+    record = json.loads(result.stdout.splitlines()[0])
+    assert (
+        result.returncode,
+        record["outcome"],
+        record["text"],
+        record["source_transcript"],
+        record["issues"],
+    ) == (
+        3,
+        "degraded",
+        "Hello, world",
+        "Բարև #err, աշխարհ",
+        [
+            {
+                "stage": "speech_to_text",
+                "code": "generation_artifact",
+                "message": "generation artifact was removed from transcript",
+            }
+        ],
+    ), "composed execution concealed a useful generation artifact"
+
+
+@pytest.mark.parametrize(
+    ("transcript", "text"),
+    (
+        ("#err Օգտակար", "Օգտակար"),
+        ("Օգտակար #er", "Օգտակար"),
+        ("Սկիզբ (#err) վերջ", "Սկիզբ ( ) վերջ"),
+        ("Սկիզբ #er\u0589 վերջ", "Սկիզբ  \u0589 վերջ"),
+    ),
+)
+def test_transcribe_removes_each_standalone_generation_marker(
+    tmp_path: Path,
+    transcript: str,
+    text: str,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    result = transcribe(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions=speech(tmp_path, (transcript,)),
+    )
+    record = json.loads(result.stdout.splitlines()[0])
+    assert (
+        result.returncode,
+        record["outcome"],
+        record["text"],
+        record["issues"][0]["code"],
+    ) == (3, "degraded", text, "generation_artifact"), (
+        "standalone generation marker escaped transcription"
+    )
+
+
+def test_run_skips_an_artifact_only_transcript_without_translation(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    result = run(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions=speech(tmp_path, ("(#err) #er\u0589",)),
+    )
+    record = json.loads(result.stdout.splitlines()[0])
+    assert (
+        result.returncode,
+        record["outcome"],
+        record["text"],
+        record["source_transcript"],
+        record["issues"][0]["code"],
+    ) == (4, "skipped", None, "(#err) #er\u0589", "generation_artifact"), (
+        "artifact-only transcript reached translation"
+    )
+
+
+def test_transcribe_rejects_a_bounded_hash_run(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    transcript = f"Սկիզբ {'#' * 256} վերջ"
+    result = transcribe(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions=speech(tmp_path, (transcript,)),
+    )
+    record = json.loads(result.stdout.splitlines()[0])
+    assert (
+        result.returncode,
+        record["outcome"],
+        record["text"],
+        record["issues"][0]["code"],
+    ) == (3, "degraded", "Սկիզբ   վերջ", "generation_artifact"), (
+        "bounded hash generation escaped transcription"
+    )
+
+
+def test_transcribe_uses_the_configured_hash_threshold(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    healthy = transcribe(
+        home,
+        "--artifact-hash-threshold",
+        "5",
+        str(source),
+        additions=speech(tmp_path, ("####",)),
+    )
+    damaged = transcribe(
+        home,
+        "--artifact-hash-threshold",
+        "4",
+        str(source),
+        additions=speech(tmp_path, ("####",)),
+    )
+    assert (
+        healthy.returncode,
+        healthy.stdout,
+        damaged.returncode,
+        damaged.stdout,
+    ) == (0, "####\n", 4, ""), "configured hash threshold had no observable effect"
+
+
+@pytest.mark.parametrize("value", ("1", "257"))
+def test_transcribe_rejects_an_unbounded_hash_threshold(
+    tmp_path: Path,
+    value: str,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    result = transcribe(
+        home,
+        "--artifact-hash-threshold",
+        value,
+        str(tmp_path / "missing.wav"),
+    )
+    assert (
+        result.returncode,
+        result.stdout,
+        "invalid_generation_guard" in result.stderr,
+    ) == (
+        2,
+        "",
+        True,
+    ), "invalid hash threshold reached input or model validation"
+
+
+def test_run_skips_an_artifact_only_hash_run(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    transcript = "#" * 256
+    result = run(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions=speech(tmp_path, (transcript,)),
+    )
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (
+        result.returncode,
+        records[0]["outcome"],
+        records[0]["text"],
+        records[0]["source_transcript"],
+        records[1]["segments"],
+    ) == (
+        4,
+        "skipped",
+        None,
+        transcript,
+        {"total": 1, "completed": 0, "degraded": 0, "skipped": 1, "failed": 0},
+    ), "artifact-only hash run reached translation or broke summary counts"
+
+
+@pytest.mark.parametrize(
+    "transcript",
+    ("#", "Թիվ # մեկ", "#թեմա", "#error", "բառ#err"),
+)
+def test_transcribe_preserves_healthy_hash_text(
+    tmp_path: Path,
+    transcript: str,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    result = transcribe(
+        home,
+        str(source),
+        additions=speech(tmp_path, (transcript,)),
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (
+        0,
+        f"{transcript}\n",
+        "",
+    ), "healthy hash text was treated as generated damage"
+
+
+def test_run_keeps_repetition_authoritative_over_a_marker(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    transcript = "#err Օգտակար կրկին կրկին կրկին"
+    result = run(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions={
+            **speech(tmp_path, (transcript, "Useful")),
+            "CARAWAY_EXPECT_TEXT": "Օգտակար",
+        },
+    )
+    record = json.loads(result.stdout.splitlines()[0])
+    assert (
+        result.returncode,
+        record["outcome"],
+        record["text"],
+        record["source_transcript"],
+        tuple(problem["code"] for problem in record["issues"]),
+    ) == (
+        3,
+        "degraded",
+        "Useful",
+        transcript,
+        ("repetition", "generation_artifact"),
+    ), "generation marker displaced authoritative cyclic detection"
+
+
+def test_run_combines_upstream_artifacts_with_downstream_repetition(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    result = run(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions=speech(
+            tmp_path,
+            ("Բարև #err", "Hello again again again"),
+        ),
+    )
+    record = json.loads(result.stdout.splitlines()[0])
+    assert (
+        result.returncode,
+        record["outcome"],
+        record["text"],
+        tuple(problem["code"] for problem in record["issues"]),
+    ) == (3, "degraded", "Hello", ("generation_artifact", "repetition")), (
+        "composed execution lost an upstream or downstream generation guard"
+    )
+
+
+def test_run_continues_after_each_generation_artifact(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path)
+    result = run(
+        home,
+        str(source),
+        additions=speech(
+            tmp_path,
+            (
+                "Առաջին #err",
+                "First",
+                "#er",
+                "Վերջ",
+                "Last",
+            ),
+        ),
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (
+        3,
+        "First\nLast\n",
+        "generation_artifact: generation artifact was removed from transcript\n"
+        "generation_artifact: generation artifact was removed from transcript\n",
+    ), "generation artifacts stopped ordered composed output"
+
+
 @pytest.mark.parametrize(
     ("outputs", "status", "outcome", "text", "transcript"),
     (
-        (("Բարեւ կրկին կրկին կրկին", "Hello"), 3, "degraded", "Hello", "Բարեւ"),
+        (
+            ("Բարեւ կրկին կրկին կրկին", "Hello"),
+            3,
+            "degraded",
+            "Hello",
+            "Բարեւ կրկին կրկին կրկին",
+        ),
         (
             ("Բարեւ կրկին կրկին կրկին", "Hello again again again"),
             3,
             "degraded",
             "Hello",
-            "Բարեւ",
+            "Բարեւ կրկին կրկին կրկին",
         ),
-        (("Բարեւ կրկին կրկին կրկին", ""), 4, "skipped", None, "Բարեւ"),
+        (
+            ("Բարեւ կրկին կրկին կրկին", ""),
+            4,
+            "skipped",
+            None,
+            "Բարեւ կրկին կրկին կրկին",
+        ),
         (("Բարեւ", "Hello again again again"), 3, "degraded", "Hello", "Բարեւ"),
         (("",), 4, "skipped", None, None),
         (("Բարեւ", ""), 4, "skipped", None, "Բարեւ"),

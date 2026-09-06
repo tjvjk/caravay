@@ -126,7 +126,10 @@ def recognize(path: Path) -> Speech:
 
 
 def transcribe(
-    backend: object, source: str, audio: array[float]
+    backend: object,
+    source: str,
+    audio: array[float],
+    hashes: int,
 ) -> transcription.Result:
     """Transcribe one audio segment offline on MPS with FP16."""
     speech = cast(Speech, backend)
@@ -147,4 +150,4 @@ def transcribe(
         clean_up_tokenization_spaces=False,
     )
     limited = len(tokens[0]) >= transcription.LIMIT + 1
-    return transcription.resolve(cast(str, generated), limited)
+    return transcription.resolve(cast(str, generated), limited, hashes)

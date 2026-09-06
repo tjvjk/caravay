@@ -62,6 +62,9 @@ uv run caraway transcribe --format jsonl armenian.m4a
 ```
 
 Each completed audio segment is flushed to stdout as soon as it is ready.
+Speech commands reject generated `#err`/`#er` markers and hash runs of eight or
+more characters. Use `--artifact-hash-threshold` after `transcribe`, `run`, or
+`live` to tune the hash-run threshold from 2 through 256.
 
 Run the explicit composed speech-to-text and text-to-text plan to produce English
 while retaining Source Armenian transcripts in JSONL output:
