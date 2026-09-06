@@ -377,6 +377,353 @@ def transcribe(
     )
 
 
+def run(
+    home: Path,
+    *arguments: str,
+    additions: Mapping[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Invoke the composed pipeline with an explicit isolated configuration."""
+    home.mkdir(parents=True, exist_ok=True)
+    config = home / f"կարգավորում-{uuid4()}.toml"
+    cache = home / "Library" / "Caches" / "caraway"
+    config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
+    return invoke(home, "--config", str(config), "run", *arguments, additions=additions)
+
+
+def test_run_emits_ordered_useful_english_segments(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path)
+    additions = speech(
+        tmp_path,
+        ("Բարեւ", "Hello", "", "Վերջ", "The end"),
+    )
+    result = run(home, str(source), additions=additions)
+    assert (result.returncode, result.stdout, result.stderr) == (
+        3,
+        "Hello\nThe end\n",
+        "empty_output: transcription produced no useful text\n",
+    ), "composed execution lost ordered useful English text"
+
+
+def test_run_preserves_transcripts_and_resolved_plan_in_jsonl(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    result = run(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions=speech(tmp_path, ("Բարի լույս", "Good morning")),
+    )
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (result.returncode, records) == (
+        0,
+        (
+            {
+                "schema_version": 1,
+                "type": "segment",
+                "index": 0,
+                "outcome": "completed",
+                "text": "Good morning",
+                "issues": [],
+                "source_transcript": "Բարի լույս",
+            },
+            {
+                "schema_version": 1,
+                "type": "summary",
+                "command": "run",
+                "route": "composed",
+                "outcome": "completed",
+                "source_language": "hye",
+                "target_language": "eng",
+                "backends": {
+                    "speech_to_text": "seamlessm4t-large-v2",
+                    "text_to_text": "seamlessm4t-large-v2",
+                },
+                "segments": {
+                    "total": 1,
+                    "completed": 1,
+                    "degraded": 0,
+                    "skipped": 0,
+                    "failed": 0,
+                },
+            },
+        ),
+    ), "composed JSONL omitted its transcript or explicit plan"
+
+
+@pytest.mark.parametrize(
+    ("outputs", "status", "outcome", "text", "transcript"),
+    (
+        (("Բարեւ կրկին կրկին կրկին", "Hello"), 3, "degraded", "Hello", "Բարեւ"),
+        (
+            ("Բարեւ կրկին կրկին կրկին", "Hello again again again"),
+            3,
+            "degraded",
+            "Hello",
+            "Բարեւ",
+        ),
+        (("Բարեւ կրկին կրկին կրկին", ""), 4, "skipped", None, "Բարեւ"),
+        (("Բարեւ", "Hello again again again"), 3, "degraded", "Hello", "Բարեւ"),
+        (("",), 4, "skipped", None, None),
+        (("Բարեւ", ""), 4, "skipped", None, "Բարեւ"),
+    ),
+)
+def test_run_propagates_each_nonfatal_stage_outcome(
+    tmp_path: Path,
+    outputs: tuple[str, ...],
+    status: int,
+    outcome: str,
+    text: str | None,
+    transcript: str | None,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    result = run(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions=speech(tmp_path, outputs),
+    )
+    record = json.loads(result.stdout.splitlines()[0])
+    assert (
+        result.returncode,
+        record["outcome"],
+        record["text"],
+        record.get("source_transcript"),
+    ) == (status, outcome, text, transcript), (
+        "composed stage outcome was improved or lost"
+    )
+
+
+def test_run_stops_after_a_fatal_translation_and_reports_it(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path)
+    additions = speech(tmp_path, ("Առաջին", "Չօգտագործված"))
+    additions["CARAWAY_RUNTIME_FAIL_INDEX"] = "1"
+    result = run(home, "--format", "jsonl", str(source), additions=additions)
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (
+        result.returncode,
+        len(records),
+        records[0].get("source_transcript"),
+        records[0]["outcome"],
+        records[1]["segments"],
+        records[1]["error"]["stage"],
+    ) == (
+        1,
+        2,
+        "Առաջին",
+        "failed",
+        {"total": 1, "completed": 0, "degraded": 0, "skipped": 0, "failed": 1},
+        "text_to_text",
+    ), "fatal translation did not preserve the partial composed outcome"
+
+
+def test_run_omits_a_transcript_after_fatal_speech_recognition(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    additions = speech(tmp_path, ("Չօգտագործված",))
+    additions["CARAWAY_RUNTIME_FAIL_INDEX"] = "0"
+    result = run(home, "--format", "jsonl", str(source), additions=additions)
+    record = json.loads(result.stdout.splitlines()[0])
+    assert (
+        result.returncode,
+        record["outcome"],
+        record["issues"][0]["stage"],
+        "source_transcript" in record,
+    ) == (1, "failed", "speech_to_text", False), (
+        "fatal speech recognition fabricated a transcript"
+    )
+
+
+def test_run_model_load_failure_reports_zero_attempted_segments(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    additions = speech(tmp_path, ("Չօգտագործված",))
+    additions["CARAWAY_RUNTIME_FAIL"] = "load"
+    result = run(home, "--format", "jsonl", str(source), additions=additions)
+    summary = json.loads(result.stdout)
+    assert (result.returncode, summary["outcome"], summary["segments"]) == (
+        1,
+        "failed",
+        {"total": 0, "completed": 0, "degraded": 0, "skipped": 0, "failed": 0},
+    ), "model load failure fabricated a composed segment"
+
+
+def test_run_validates_the_complete_plan_before_model_loading(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    additions = speech(tmp_path, ("Չօգտագործված",))
+    additions["CARAWAY_RUNTIME_FAIL"] = "load"
+    result = run(
+        home,
+        "--translation-backend",
+        "անհայտ",
+        str(source),
+        additions=additions,
+    )
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "invalid complete plan reached model loading"
+    )
+
+
+@pytest.mark.parametrize(
+    ("arguments", "operand"),
+    (
+        (("--source", "HYE"), "audio"),
+        (("--target", "fra"), "audio"),
+        ((), "-"),
+        ((), "https://օրինակ.test/ձայն.wav"),
+        ((), "folder"),
+    ),
+)
+def test_run_rejects_invalid_input_and_languages_before_loading(
+    tmp_path: Path, arguments: tuple[str, ...], operand: str
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    home.joinpath("folder").mkdir(parents=True)
+    source = str(audio(tmp_path, 1)) if operand == "audio" else operand
+    additions = runtime(tmp_path)
+    additions["CARAWAY_RUNTIME_FAIL"] = "load"
+    result = run(home, *arguments, source, additions=additions)
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "invalid run input or language reached model loading"
+    )
+
+
+def test_run_writes_deterministic_utf8_lf_output_bytes(tmp_path: Path) -> None:
+    outputs = ("Բարի լույս", "Good morning Ա")
+    results = []
+    for _ in range(2):
+        home = tmp_path / f"տուն-{uuid4()}"
+        publish(home)
+        source = audio(tmp_path, 1)
+        additions = speech(tmp_path, outputs)
+        environment = os.environ.copy()
+        environment.update(additions)
+        environment["HOME"] = str(home)
+        config = home / f"կարգավորում-{uuid4()}.toml"
+        cache = home / "Library" / "Caches" / "caraway"
+        config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
+        command = Path(sys.executable).with_name("caraway")
+        results.append(
+            subprocess.run(
+                (command, "--config", str(config), "run", str(source)),
+                capture_output=True,
+                check=False,
+                env=environment,
+                timeout=5,
+            )
+        )
+    assert tuple(
+        (result.returncode, result.stdout, result.stderr) for result in results
+    ) == (
+        (0, "Good morning Ա\n".encode(), b""),
+        (0, "Good morning Ա\n".encode(), b""),
+    ), "fixed composed execution produced nondeterministic output bytes"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    (
+        ("--route", "composed", "--backend", "seamlessm4t-large-v2"),
+        (
+            "--route",
+            "fused",
+            "--backend",
+            "seamlessm4t-large-v2",
+            "--speech-backend",
+            "seamlessm4t-large-v2",
+        ),
+    ),
+)
+def test_run_rejects_conflicting_route_options(
+    tmp_path: Path, arguments: tuple[str, ...]
+) -> None:
+    source = audio(tmp_path, 1)
+    result = run(tmp_path / f"տուն-{uuid4()}", *arguments, str(source))
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "conflicting composed and fused options were accepted"
+    )
+
+
+def test_run_rejects_a_configured_unsupported_fused_route(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    home.mkdir()
+    source = audio(tmp_path, 1)
+    config = home / f"կարգավորում-{uuid4()}.toml"
+    config.write_text(
+        '[commands.run]\nroute = "fused"\nbackend = "seamlessm4t-large-v2"\n',
+        encoding="utf-8",
+    )
+    result = invoke(home, "--config", str(config), "run", str(source))
+    assert (result.returncode, result.stdout) == (2, ""), (
+        "unsupported configured fused route was executed"
+    )
+
+
+def test_run_cli_route_overrides_the_configured_route_independently(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    home.mkdir()
+    publish(home)
+    source = audio(tmp_path, 1)
+    config = home / f"կարգավորում-{uuid4()}.toml"
+    cache = home / "Library" / "Caches" / "caraway"
+    config.write_text(
+        f'cache_dir = "{cache}"\n'
+        '[commands.run]\nroute = "fused"\nbackend = "seamlessm4t-large-v2"\n',
+        encoding="utf-8",
+    )
+    result = invoke(
+        home,
+        "--config",
+        str(config),
+        "run",
+        "--route",
+        "composed",
+        str(source),
+        additions=speech(tmp_path, ("Բարեւ", "Hello")),
+    )
+    assert (result.returncode, result.stdout) == (0, "Hello\n"), (
+        "CLI route did not independently override the configured route"
+    )
+
+
+@pytest.mark.skipif(
+    "CARAWAY_REAL_MODEL_CONFIG" not in os.environ,
+    reason="real model smoke test is opt-in",
+)
+def test_run_real_model_produces_useful_english(tmp_path: Path) -> None:
+    result = invoke(
+        tmp_path / f"տուն-{uuid4()}",
+        "--config",
+        os.environ["CARAWAY_REAL_MODEL_CONFIG"],
+        "run",
+        os.environ["CARAWAY_REAL_AUDIO"],
+        network=False,
+    )
+    assert (result.returncode, bool(result.stdout.strip())) == (0, True), (
+        "real composed model did not produce useful English"
+    )
+
+
 def test_transcribe_requires_one_local_audio_file(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
     result = transcribe(home, "-")

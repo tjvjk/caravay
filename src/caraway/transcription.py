@@ -103,7 +103,7 @@ class Runtime(Protocol):
         """Require the configured runtime device."""
         ...
 
-    def load_speech(self, path: Path) -> object:
+    def recognize(self, path: Path) -> object:
         """Load the pinned speech model once."""
         ...
 
@@ -353,7 +353,7 @@ def fail(
 
 def load(path: Path) -> object:
     """Load the pinned speech model once for a transcription command."""
-    return runtime().load_speech(path)
+    return runtime().recognize(path)
 
 
 def transcribe(backend: object, source: str, audio: array[float]) -> Result:
