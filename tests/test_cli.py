@@ -852,6 +852,106 @@ def test_transcribe_truncates_repetition_and_continues(tmp_path: Path) -> None:
     ), "repetition prevented later transcription segments"
 
 
+def test_transcribe_truncates_repetition_with_varied_punctuation(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    result = transcribe(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions=speech(
+            tmp_path,
+            ("Օգտակար,  տեքստ տատիկին, տատիկին\u0589 տատիկին՜",),
+        ),
+    )
+    record = json.loads(result.stdout.splitlines()[0])
+    assert (result.returncode, record["outcome"], record["text"]) == (
+        3,
+        "degraded",
+        "Օգտակար,  տեքստ",
+    ), "punctuation concealed a cyclic Armenian suffix"
+
+
+def test_transcribe_truncates_a_multiword_cycle_at_the_generation_limit(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    result = transcribe(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions=speech(
+            tmp_path,
+            ("Սկիզբ նայեք մինա նայեք մինա նայեք",),
+        ),
+    )
+    record = json.loads(result.stdout.splitlines()[0])
+    assert (result.returncode, record["outcome"], record["text"]) == (
+        3,
+        "degraded",
+        "Սկիզբ",
+    ), "generation-limit cutoff concealed a multiword cycle"
+
+
+def test_transcribe_removes_bounded_armenian_cycles_and_continues(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path)
+    result = transcribe(
+        home,
+        "--format",
+        "jsonl",
+        str(source),
+        additions=speech(
+            tmp_path,
+            (
+                "Պահպանված նայեք մինա նայեք\u055d մինա\u055d նայեք\u0589 մինա\u0589",
+                "մինա\u055d մինա\u0589 մինա՜",
+                "Վերջ",
+            ),
+        ),
+    )
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (
+        result.returncode,
+        tuple(record.get("text") for record in records[:-1]),
+        tuple(record["outcome"] for record in records[:-1]),
+        tuple(
+            record["issues"][0]["code"] if record["issues"] else None
+            for record in records[:-1]
+        ),
+    ) == (
+        3,
+        ("Պահպանված", None, "Վերջ"),
+        ("degraded", "skipped", "completed"),
+        ("repetition", "repetition", None),
+    ), "bounded Armenian cycles escaped or stopped later segments"
+
+
+def test_transcribe_preserves_ordinary_grammatical_repetition(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    source = audio(tmp_path, 1)
+    result = transcribe(
+        home,
+        str(source),
+        additions=speech(tmp_path, ("Նայեք, նայեք\u055d տատիկին\u0589",)),
+    )
+    assert (result.returncode, result.stdout) == (
+        0,
+        "Նայեք, նայեք\u055d տատիկին\u0589\n",
+    ), "ordinary grammatical repetition was removed"
+
+
 def test_transcribe_serializes_a_fatal_partial_jsonl_outcome(
     tmp_path: Path,
 ) -> None:

@@ -3,7 +3,6 @@
 import importlib
 import json
 import os
-import re
 import subprocess
 from array import array
 from dataclasses import dataclass
@@ -19,6 +18,7 @@ from typing import (
 )
 
 from caraway.models import inspect
+from caraway.repetition import trim
 from caraway.settings import Backend, Settings
 from caraway.translation import Format, Outcome, ValidationError
 
@@ -187,23 +187,6 @@ def decode(path: Path) -> tuple[array[float], ...]:
     return tuple(
         samples[index : index + SPAN] for index in range(0, len(samples), SPAN)
     )
-
-
-def trim(text: str) -> str:
-    """Remove a suffix made from three or more identical generated phrases."""
-    matches = tuple(re.finditer(r"\S+", text))
-    words = tuple(value.group() for value in matches)
-    for size in range(1, len(words) // 3 + 1):
-        suffix = words[-size:]
-        repeats = 1
-        while (
-            size * (repeats + 1) <= len(words)
-            and words[-size * (repeats + 1) : -size * repeats] == suffix
-        ):
-            repeats += 1
-        if repeats >= 3:
-            return text[: matches[len(words) - size * repeats].start()].rstrip()
-    return text
 
 
 def resolve(generated: str) -> Result:
