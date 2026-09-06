@@ -7,7 +7,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import cast
 
-from caraway import transcription
+from caraway import execution, transcription
 from caraway.models import DownloadError, DownloadLockError, download, inspect
 from caraway.settings import InvalidConfigError, Settings, load
 from caraway.translation import (
@@ -55,6 +55,17 @@ def parser() -> argparse.ArgumentParser:
     speech.add_argument("--format", choices=FORMAT, default="text")
     speech.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
     speech.add_argument("--verbose", action="store_true")
+    composed = commands.add_parser("run")
+    composed.add_argument("audio")
+    composed.add_argument("--source", default="hye")
+    composed.add_argument("--target", default="eng")
+    composed.add_argument("--route", choices=("composed", "fused"))
+    composed.add_argument("--speech-backend", dest="speech", default="")
+    composed.add_argument("--translation-backend", dest="translation", default="")
+    composed.add_argument("--backend", dest="fused", default="")
+    composed.add_argument("--format", choices=FORMAT, default="text")
+    composed.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
+    composed.add_argument("--verbose", action="store_true")
     return result
 
 
@@ -188,6 +199,51 @@ def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
     return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
 
 
+def run(arguments: argparse.Namespace, config: Settings) -> int:
+    """Validate and execute the explicit composed speech-to-English plan."""
+    try:
+        prepared = execution.prepare(
+            execution.Request(
+                arguments.route or "",
+                arguments.fused,
+                arguments.speech,
+                arguments.translation,
+                config.commands.run,
+                arguments.source,
+                arguments.target,
+                arguments.audio,
+                config.cache_dir,
+                arguments.verbose,
+            )
+        )
+    except ValidationError as error:
+        print(error, file=sys.stderr)
+        return 2
+    backend = execution.runtime()
+    try:
+        if not arguments.quiet and sys.stderr.isatty():
+            print("Loading composed models", file=sys.stderr)
+        loaded = execution.load(prepared, backend)
+    except Exception as error:
+        print(f"execution_failed: model loading failed: {error}", file=sys.stderr)
+        problem = execution.Issue(
+            "speech_to_text", "execution_failed", "model loading failed"
+        )
+        execution.fail(
+            sys.stdout,
+            arguments.format,
+            prepared.plan,
+            problem,
+        )
+        return 1
+    values = execution.execute(
+        prepared, loaded, sys.stdout, sys.stderr, arguments.format
+    )
+    execution.finish(sys.stdout, values, arguments.format, prepared.plan)
+    outcome = execution.aggregate(values)
+    return {"completed": 0, "failed": 1, "degraded": 3, "skipped": 4}[outcome]
+
+
 def main() -> int:
     """Run the Caraway command-line interface."""
     cast(io.TextIOWrapper, sys.stdin).reconfigure(encoding="utf-8", errors="strict")
@@ -211,6 +267,8 @@ def main() -> int:
         return process(arguments, config)
     if arguments.command == "transcribe":
         return transcribe(arguments, config)
+    if arguments.command == "run":
+        return run(arguments, config)
     if arguments.action == "status":
         state = inspect(config.cache_dir)
         print(state)
