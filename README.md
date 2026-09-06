@@ -80,7 +80,7 @@ ffmpeg -re -i armenian.wav -f f32le -ac 1 -ar 16000 pipe:1 | uv run caraway live
 
 Live input is little-endian Float32 mono PCM at 16 kHz. The defaults close speech
 after 600 ms of silence, cap a segment at 8 seconds, defer speech shorter than
-200 ms, and allow a five-second bounded input backlog. The corresponding options
+200 ms, and allow a 30-second bounded input backlog. The corresponding options
 can tune those timing bounds without changing language or backend routing. A full
 backlog is reported as `overload` and exits unsuccessfully; samples are never
 silently dropped. EOF finalizes remaining speech once and discards silence.
