@@ -75,3 +75,14 @@ Strengthen cyclic generation detection
       this ticket; the live pipeline has no source-specific assumptions beyond the
       documented PCM stdin contract, so those producers can connect without a
       second segmentation or translation implementation.
+
+## Comments
+
+### 2026-09-06 implementation verification
+
+Paced the full five-minute reference recording
+`corpus/WncDNZDeWr0/WncDNZDeWr0_15m30s-20m30s.m4a` through `ffmpeg -re` as
+Float32 mono 16 kHz PCM. English results appeared while ffmpeg was still running.
+The clean-EOF run attempted 38 segments: 33 completed, 3 degraded, 2 skipped,
+and 0 failed. Measured segment latency ranged from 643 ms to 2918 ms with a
+1115 ms average; maximum backlog was 255 20-ms frames (about 5.1 seconds).
