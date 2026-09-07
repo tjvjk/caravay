@@ -10,7 +10,8 @@ information for verbose diagnostics.
 system audio to live PCM
 
 **Status:** ready-for-agent
-**State:** open
+**State:** closed
+**Closed by:** https://github.com/tjvjk/caraway/pull/9
 
 _This ticket changes presentation only. It does not add partial transcripts,
 change segmentation or generation behavior, or change the machine-readable result
@@ -44,46 +45,46 @@ pipeline processes currently report the same event.
 
 ## Acceptance criteria
 
-- [ ] On a compatible interactive terminal, `caraway live` presents one transient
+- [x] On a compatible interactive terminal, `caraway live` presents one transient
       status line that makes the current phase visible. It distinguishes at least
       listening for/collecting audio from transcribing a finalized segment and
       includes elapsed session time while listening (for example,
       `Listening... 00:07` and `Transcribing...`).
-- [ ] The transient status is updated in place at a restrained cadence rather than
+- [x] The transient status is updated in place at a restrained cadence rather than
       appending heartbeat lines. It is cleared before a transcript segment,
       actionable diagnostic, or final lifecycle message is written, then restored
       if live processing continues. Output remains legible when a segment arrives
       during a status update.
-- [ ] Interactive status is enabled only when the diagnostics stream is a TTY and
+- [x] Interactive status is enabled only when the diagnostics stream is a TTY and
       normal quiet-mode rules allow it. Non-TTY stderr receives no spinner,
       carriage returns, ANSI control sequences, periodic heartbeat, or other
       unbounded status output.
-- [ ] Plain transcript stdout remains byte-compatible with the existing immutable
+- [x] Plain transcript stdout remains byte-compatible with the existing immutable
       LF-delimited contract. JSONL output and PCM stdout from `caraway-capture`
       likewise receive no presentation text or terminal control bytes.
-- [ ] Successfully removed generation artifacts and repetition suffixes do not
+- [x] Successfully removed generation artifacts and repetition suffixes do not
       produce a per-segment warning in the default interactive experience. The
       segment retains its existing degraded/skipped outcome, issue metadata,
       aggregate accounting, and exit-status semantics.
-- [ ] Verbose mode exposes automatic cleanup in plain language, for example
+- [x] Verbose mode exposes automatic cleanup in plain language, for example
       `cleanup: omitted non-speech model output`, without relying on the internal
       `generation_artifact` identifier as the user-facing explanation. Structured
       issue codes remain stable wherever they are part of a machine-readable
       contract.
-- [ ] `first_pcm` uptime, capture queue peak, and native termination codes are
+- [x] `first_pcm` uptime, capture queue peak, and native termination codes are
       hidden during a normal interactive run and remain available through an
       explicit verbose or diagnostic mode used by acceptance measurements.
-- [ ] A normal Ctrl-C shutdown produces one concise human-facing completion, such
+- [x] A normal Ctrl-C shutdown produces one concise human-facing completion, such
       as `Stopped. 5 segments transcribed, 1 cleaned up.` It does not print
       duplicate producer/consumer interruption messages. Shell-standard SIGINT
       exit behavior and resource cleanup remain unchanged.
-- [ ] Startup and terminal rendering do not assume that the native capture
+- [x] Startup and terminal rendering do not assume that the native capture
       producer is present: `caraway live` provides useful status when fed by any
       valid paced PCM producer, and `caraway-capture` remains independently usable.
-- [ ] Quiet mode suppresses progress and routine lifecycle presentation but not
+- [x] Quiet mode suppresses progress and routine lifecycle presentation but not
       fatal, actionable diagnostics. Verbose mode can coexist with transient
       status without overwriting or visually corrupting diagnostic lines.
-- [ ] Fast tests use controlled streams, clocks, TTY capability, and terminal
+- [x] Fast tests use controlled streams, clocks, TTY capability, and terminal
       widths to cover idle listening, phase transitions, multiple segments,
       cleanup, quiet mode, verbose mode, non-TTY output, narrow terminals, EOF,
       SIGINT, overload, and fatal input/model failure.
@@ -104,4 +105,3 @@ Stopped. 5 segments transcribed, 1 cleaned up.
 ```
 
 ## Comments
-
