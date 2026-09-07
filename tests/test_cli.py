@@ -3,6 +3,7 @@
 import json
 import os
 import pty
+import re
 import select
 import subprocess
 import sys
@@ -344,20 +345,6 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2ForTextToText):
 ''',
         encoding="utf-8",
     )
-    root.joinpath("sitecustomize.py").write_text(
-        '''"""Install an optional subprocess-visible controlled clock."""
-import os
-import time
-from pathlib import Path
-
-if clock := os.environ.get("CARAWAY_TEST_CLOCK"):
-    actual = time.monotonic
-    def monotonic():
-        return actual() + float(Path(clock).read_text(encoding="utf-8"))
-    time.monotonic = monotonic
-''',
-        encoding="utf-8",
-    )
     return {
         "PYTHONPATH": str(root),
         "CARAWAY_MPS": "1",
@@ -380,6 +367,15 @@ def speech(tmp_path: Path, outputs: tuple[str, ...]) -> dict[str, str]:
     """Create a controlled speech runtime with one output per segment."""
     additions = runtime(tmp_path)
     additions["CARAWAY_OUTPUTS"] = json.dumps(outputs, ensure_ascii=False)
+    return additions
+
+
+def isolate(tmp_path: Path, additions: dict[str, str]) -> dict[str, str]:
+    """Combine controlled model and package-import adapters."""
+    _, boundary = hub(tmp_path)
+    paths = (additions["PYTHONPATH"], boundary.pop("PYTHONPATH"))
+    additions["PYTHONPATH"] = os.pathsep.join(paths)
+    additions.update(boundary)
     return additions
 
 
@@ -446,16 +442,10 @@ def live(
     )
 
 
-def interact(
-    home: Path,
-    samples: tuple[float, ...],
-    *arguments: str,
-    additions: Mapping[str, str] | None = None,
-    columns: int = 80,
-    delay: float = 0,
-    clock: Path | None = None,
-) -> tuple[int, bytes, bytes]:
-    """Invoke live translation with diagnostics attached to a controlled TTY."""
+def prepare(
+    home: Path, additions: Mapping[str, str] | None
+) -> tuple[Path, dict[str, str]]:
+    """Prepare isolated live CLI configuration and environment."""
     home.mkdir(parents=True, exist_ok=True)
     config = home / f"կարգավորում-{uuid4()}.toml"
     cache = home / "Library" / "Caches" / "caraway"
@@ -464,10 +454,63 @@ def interact(
     environment["HOME"] = str(home)
     if additions is not None:
         environment.update(additions)
-    command = Path(sys.executable).with_name("caraway")
+    return config, environment
+
+
+def attach(columns: int) -> tuple[int, int]:
+    """Open a nonblocking diagnostics terminal with controlled width."""
     master, slave = pty.openpty()
     termios.tcsetwinsize(slave, (24, columns))
     os.set_blocking(master, False)
+    return master, slave
+
+
+def receive(master: int, marker: bytes, timeout: float) -> bytes:
+    """Read terminal output until a marker, timeout, or current exhaustion."""
+    diagnostics = b""
+    deadline = time.monotonic() + timeout
+    while marker not in diagnostics:
+        remaining = max(0, deadline - time.monotonic())
+        if not select.select((master,), (), (), min(0.05, remaining))[0]:
+            if remaining == 0:
+                break
+            continue
+        try:
+            chunk = os.read(master, 4_096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        diagnostics += chunk
+    return diagnostics
+
+
+def drain(master: int) -> bytes:
+    """Drain all currently readable terminal output."""
+    diagnostics = b""
+    while select.select((master,), (), (), 0)[0]:
+        try:
+            chunk = os.read(master, 4_096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        diagnostics += chunk
+    return diagnostics
+
+
+def interact(
+    home: Path,
+    samples: tuple[float, ...],
+    *arguments: str,
+    additions: Mapping[str, str] | None = None,
+    columns: int = 80,
+    delay: float = 0,
+) -> tuple[int, bytes, bytes]:
+    """Invoke live translation with diagnostics attached to a controlled TTY."""
+    config, environment = prepare(home, additions)
+    command = Path(sys.executable).with_name("caraway")
+    master, slave = attach(columns)
     try:
         with subprocess.Popen(
             (
@@ -486,24 +529,11 @@ def interact(
             env=environment,
         ) as process:
             diagnostics = b""
-            if clock is not None:
-                deadline = time.monotonic() + 5
-                while b"Listening..." not in diagnostics:
-                    if time.monotonic() >= deadline:
-                        break
-                    if select.select((master,), (), (), 0.05)[0]:
-                        diagnostics += os.read(master, 4_096)
-                clock.write_text("7", encoding="utf-8")
+            if delay:
+                diagnostics = receive(master, b"Listening...", 5)
             time.sleep(delay)
             stdout = process.communicate(array("f", samples).tobytes(), timeout=5)[0]
-        while select.select((master,), (), (), 0)[0]:
-            try:
-                chunk = os.read(master, 4_096)
-            except OSError:
-                break
-            if not chunk:
-                break
-            diagnostics += chunk
+        diagnostics += drain(master)
     finally:
         os.close(slave)
         os.close(master)
@@ -576,18 +606,14 @@ def test_live_status_fits_a_narrow_terminal(tmp_path: Path) -> None:
 def test_live_updates_elapsed_time_while_input_is_idle(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
     publish(home)
-    clock = tmp_path / f"ժամացույց-{uuid4()}"
-    clock.write_text("0", encoding="utf-8")
-    additions = speech(tmp_path, ("Բարեւ", "Hello"))
-    additions["CARAWAY_TEST_CLOCK"] = str(clock)
+    additions = isolate(tmp_path, speech(tmp_path, ("Բարեւ", "Hello")))
     result = interact(
         home,
         (0.2,) * 3_200,
         additions=additions,
         delay=1.1,
-        clock=clock,
     )
-    assert b"Listening... 00:08" in result[2], (
+    assert re.search(rb"Listening\.\.\. 00:0[1-9]", result[2]), (
         "live terminal did not refresh elapsed listening time"
     )
 
@@ -648,30 +674,33 @@ def test_live_overload_diagnostic_clears_transient_status(tmp_path: Path) -> Non
 def test_live_interrupt_reports_one_human_completion(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
     publish(home)
-    config = home / f"կարգավորում-{uuid4()}.toml"
-    config.write_text(
-        f'cache_dir = "{home / "Library" / "Caches" / "caraway"}"\n',
-        encoding="utf-8",
-    )
-    environment = os.environ.copy()
-    environment["HOME"] = str(home)
-    environment.update(speech(tmp_path, ("Չօգտագործված",)))
+    additions = isolate(tmp_path, speech(tmp_path, ("Չօգտագործված",)))
+    config, environment = prepare(home, additions)
     command = Path(sys.executable).with_name("caraway")
-    with subprocess.Popen(
-        (command, "--config", config, "live", "--input-format", "f32le", "-"),
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=environment,
-    ) as process:
-        time.sleep(0.2)
-        process.send_signal(2)
-        stdout, stderr = process.communicate(timeout=5)
-    assert (process.returncode, stdout, stderr) == (
-        130,
-        b"",
-        b"Stopped. 0 segments transcribed, 0 cleaned up.\n",
-    ), "live interrupt emitted duplicate or internal lifecycle diagnostics"
+    master, slave = attach(80)
+    try:
+        with subprocess.Popen(
+            (command, "--config", config, "live", "--input-format", "f32le", "-"),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=slave,
+            env=environment,
+        ) as process:
+            diagnostics = receive(master, b"Listening...", 8)
+            process.send_signal(2)
+            stdout = process.communicate(timeout=5)[0]
+        diagnostics += drain(master)
+    finally:
+        os.close(slave)
+        os.close(master)
+    assert (
+        process.returncode,
+        stdout,
+        diagnostics.count(b"Stopped. 0 segments transcribed, 0 cleaned up."),
+        b"Traceback" in diagnostics,
+    ) == (130, b"", 1, False), (
+        "live interrupt emitted duplicate or internal lifecycle diagnostics"
+    )
 
 
 def test_live_cleanup_is_quiet_by_default_and_plain_in_verbose_mode(
