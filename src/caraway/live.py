@@ -2,6 +2,7 @@
 
 import json
 import math
+import os
 import queue
 import threading
 import time
@@ -21,6 +22,7 @@ MIN_MS: Final = 200
 BUFFER_SECONDS: Final = 30.0
 THRESHOLD: Final = 0.01
 Completion = Literal["clean_eof", "interruption", "overload", "failure"]
+Phase = Literal["listening", "transcribing"]
 
 
 class LiveDocument(TypedDict):
@@ -88,6 +90,110 @@ class Capture:
     errors: list[str]
     peak: list[int]
     reader: threading.Thread
+
+
+@dataclass(frozen=True)
+class Presentation:
+    """Hold synchronized transient terminal presentation state."""
+
+    stream: TextIO
+    enabled: bool
+    started: float
+    phase: list[Phase]
+    lock: threading.Lock
+    stopped: threading.Event
+    renderer: threading.Thread
+
+
+def label(phase: Phase, started: float) -> str:
+    """Describe one live phase within the available terminal width."""
+    if phase == "transcribing":
+        return "Transcribing..."
+    elapsed = max(0, int(time.monotonic() - started))
+    return f"Listening... {elapsed // 60:02d}:{elapsed % 60:02d}"
+
+
+def render(stream: TextIO, phase: Phase, started: float) -> bool:
+    """Replace the current transient line with a width-safe phase label."""
+    try:
+        width = max(1, os.get_terminal_size(stream.fileno()).columns)
+    except (AttributeError, OSError):
+        width = 80
+    stream.write("\r\033[2K" + label(phase, started)[:width])
+    stream.flush()
+    return True
+
+
+def refresh(
+    stream: TextIO,
+    started: float,
+    phase: list[Phase],
+    lock: threading.Lock,
+    stopped: threading.Event,
+) -> bool:
+    """Refresh elapsed listening time at a restrained cadence."""
+    while not stopped.wait(1):
+        with lock:
+            render(stream, phase[0], started)
+    return True
+
+
+def present(stream: TextIO, enabled: bool) -> Presentation:
+    """Start transient live presentation when diagnostics support it."""
+    started = time.monotonic()
+    phase: list[Phase] = ["listening"]
+    lock = threading.Lock()
+    stopped = threading.Event()
+    renderer = threading.Thread(
+        target=refresh,
+        args=(stream, started, phase, lock, stopped),
+        daemon=True,
+    )
+    result = Presentation(stream, enabled, started, phase, lock, stopped, renderer)
+    if enabled:
+        render(stream, phase[0], started)
+        renderer.start()
+    return result
+
+
+def show(presentation: Presentation, phase: Phase) -> bool:
+    """Change and immediately display the current live phase."""
+    if not presentation.enabled:
+        return False
+    with presentation.lock:
+        presentation.phase[0] = phase
+        render(presentation.stream, phase, presentation.started)
+    return True
+
+
+def clear(presentation: Presentation) -> bool:
+    """Clear transient presentation before durable output."""
+    if not presentation.enabled:
+        return False
+    presentation.stream.write("\r\033[2K")
+    presentation.stream.flush()
+    return True
+
+
+def diagnose(presentation: Presentation, message: str) -> bool:
+    """Write one durable diagnostic without corrupting transient status."""
+    with presentation.lock:
+        clear(presentation)
+        print(message, file=presentation.stream, flush=True)
+        if presentation.enabled:
+            render(presentation.stream, presentation.phase[0], presentation.started)
+    return True
+
+
+def dismiss(presentation: Presentation) -> bool:
+    """Stop and remove transient live presentation."""
+    if not presentation.enabled:
+        return False
+    presentation.stopped.set()
+    presentation.renderer.join(timeout=1)
+    with presentation.lock:
+        clear(presentation)
+    return True
 
 
 def options(
@@ -334,18 +440,38 @@ def attempt(
     prepared: execution.Prepared,
     loaded: execution.Loaded,
     output: TextIO,
-    diagnostics: TextIO,
+    presentation: Presentation,
     representation: Format,
     index: int,
+    verbose: bool,
 ) -> execution.Result:
     """Run and emit one finalized live speech segment."""
+    show(presentation, "transcribing")
     attempted = execution.attempt(segment.samples, prepared, loaded)
     if attempted.diagnostic:
-        print(attempted.diagnostic, file=diagnostics)
+        diagnose(presentation, attempted.diagnostic)
     if attempted.result.outcome in ("degraded", "skipped"):
         for problem in attempted.result.issues:
-            print(f"{problem.code}: {problem.message}", file=diagnostics)
-    write(output, attempted.result, segment, index, representation)
+            if problem.code in ("generation_artifact", "repetition"):
+                if verbose:
+                    message = (
+                        "cleanup: omitted non-speech model output"
+                        if problem.code == "generation_artifact"
+                        else "cleanup: trimmed repeated model output"
+                    )
+                    diagnose(presentation, message)
+            else:
+                diagnose(presentation, f"{problem.code}: {problem.message}")
+    with presentation.lock:
+        clear(presentation)
+        write(output, attempted.result, segment, index, representation)
+        presentation.phase[0] = "listening"
+        if presentation.enabled:
+            render(
+                presentation.stream,
+                presentation.phase[0],
+                presentation.started,
+            )
     return attempted.result
 
 
@@ -353,11 +479,12 @@ def execute(
     capture: Capture,
     source: BinaryIO,
     output: TextIO,
-    diagnostics: TextIO,
+    presentation: Presentation,
     prepared: execution.Prepared,
     loaded: execution.Loaded,
     settings: Options,
     representation: Format,
+    verbose: bool,
 ) -> tuple[tuple[execution.Result, ...], Terminal]:
     """Drain, segment, translate, and emit one bounded live PCM stream."""
     results: list[execution.Result] = []
@@ -380,9 +507,10 @@ def execute(
                         prepared,
                         loaded,
                         output,
-                        diagnostics,
+                        presentation,
                         representation,
                         len(results),
+                        verbose,
                     )
             results.append(result)
             if result.outcome == "failed":
@@ -391,12 +519,12 @@ def execute(
     except KeyboardInterrupt:
         state = Terminal("interruption", capture.peak[0])
     if state.completion == "overload":
-        print(
+        diagnose(
+            presentation,
             f"overload: live backlog exceeded {settings.capacity} frames",
-            file=diagnostics,
         )
     if capture.failed.is_set():
         detail = capture.errors[-1] if capture.errors else "unknown input error"
-        print(f"invalid_input: live PCM input pipe failed: {detail}", file=diagnostics)
+        diagnose(presentation, f"invalid_input: live PCM input pipe failed: {detail}")
     settle(capture, source)
     return tuple(results), state
