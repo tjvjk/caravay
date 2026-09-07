@@ -3,8 +3,10 @@
 import json
 import os
 import pty
+import select
 import subprocess
 import sys
+import termios
 import time
 import wave
 from array import array
@@ -342,6 +344,20 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2ForTextToText):
 ''',
         encoding="utf-8",
     )
+    root.joinpath("sitecustomize.py").write_text(
+        '''"""Install an optional subprocess-visible controlled clock."""
+import os
+import time
+from pathlib import Path
+
+if clock := os.environ.get("CARAWAY_TEST_CLOCK"):
+    actual = time.monotonic
+    def monotonic():
+        return actual() + float(Path(clock).read_text(encoding="utf-8"))
+    time.monotonic = monotonic
+''',
+        encoding="utf-8",
+    )
     return {
         "PYTHONPATH": str(root),
         "CARAWAY_MPS": "1",
@@ -430,6 +446,70 @@ def live(
     )
 
 
+def interact(
+    home: Path,
+    samples: tuple[float, ...],
+    *arguments: str,
+    additions: Mapping[str, str] | None = None,
+    columns: int = 80,
+    delay: float = 0,
+    clock: Path | None = None,
+) -> tuple[int, bytes, bytes]:
+    """Invoke live translation with diagnostics attached to a controlled TTY."""
+    home.mkdir(parents=True, exist_ok=True)
+    config = home / f"կարգավորում-{uuid4()}.toml"
+    cache = home / "Library" / "Caches" / "caraway"
+    config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
+    environment = os.environ.copy()
+    environment["HOME"] = str(home)
+    if additions is not None:
+        environment.update(additions)
+    command = Path(sys.executable).with_name("caraway")
+    master, slave = pty.openpty()
+    termios.tcsetwinsize(slave, (24, columns))
+    os.set_blocking(master, False)
+    try:
+        with subprocess.Popen(
+            (
+                command,
+                "--config",
+                config,
+                "live",
+                "--input-format",
+                "f32le",
+                *arguments,
+                "-",
+            ),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=slave,
+            env=environment,
+        ) as process:
+            diagnostics = b""
+            if clock is not None:
+                deadline = time.monotonic() + 5
+                while b"Listening..." not in diagnostics:
+                    if time.monotonic() >= deadline:
+                        break
+                    if select.select((master,), (), (), 0.05)[0]:
+                        diagnostics += os.read(master, 4_096)
+                clock.write_text("7", encoding="utf-8")
+            time.sleep(delay)
+            stdout = process.communicate(array("f", samples).tobytes(), timeout=5)[0]
+        while select.select((master,), (), (), 0)[0]:
+            try:
+                chunk = os.read(master, 4_096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            diagnostics += chunk
+    finally:
+        os.close(slave)
+        os.close(master)
+    return process.returncode, stdout, diagnostics
+
+
 def test_live_translates_one_pcm_utterance_at_eof(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
     publish(home)
@@ -440,6 +520,175 @@ def test_live_translates_one_pcm_utterance_at_eof(tmp_path: Path) -> None:
         b"Hello\n",
         b"",
     ), "live PCM speech was not translated at end of input"
+
+
+def test_live_shows_transient_phases_only_on_the_diagnostics_terminal(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = interact(
+        home,
+        (0.2,) * 3_200,
+        additions=speech(tmp_path, ("Բարեւ", "Hello")),
+    )
+    assert (
+        result[0],
+        result[1],
+        b"Listening... 00:00" in result[2],
+        b"Transcribing..." in result[2],
+    ) == (0, b"Hello\n", True, True), "live terminal concealed a processing phase"
+
+
+def test_live_quiet_mode_suppresses_terminal_status(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = interact(
+        home,
+        (0.2,) * 3_200,
+        "--quiet",
+        additions=speech(tmp_path, ("Բարեւ", "Hello")),
+    )
+    assert result == (0, b"Hello\n", b""), "quiet live mode emitted presentation"
+
+
+def test_live_status_fits_a_narrow_terminal(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = interact(
+        home,
+        (0.2,) * 3_200,
+        additions=speech(tmp_path, ("Բարեւ", "Hello")),
+        columns=9,
+    )
+    states = tuple(
+        part.split(b"\x1b[2K", 1)[1]
+        for part in result[2].split(b"\r")
+        if b"\x1b[2K" in part
+    )
+    assert (result[0], result[1], all(len(state) <= 9 for state in states)) == (
+        0,
+        b"Hello\n",
+        True,
+    ), "live status exceeded the terminal width"
+
+
+def test_live_updates_elapsed_time_while_input_is_idle(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    clock = tmp_path / f"ժամացույց-{uuid4()}"
+    clock.write_text("0", encoding="utf-8")
+    additions = speech(tmp_path, ("Բարեւ", "Hello"))
+    additions["CARAWAY_TEST_CLOCK"] = str(clock)
+    result = interact(
+        home,
+        (0.2,) * 3_200,
+        additions=additions,
+        delay=1.1,
+        clock=clock,
+    )
+    assert b"Listening... 00:08" in result[2], (
+        "live terminal did not refresh elapsed listening time"
+    )
+
+
+def test_live_restores_status_after_multiple_segments(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    samples = (0.2,) * 3_200 + (0.0,) * 9_600 + (0.3,) * 4_800
+    result = interact(
+        home,
+        samples,
+        additions=speech(tmp_path, ("Առաջին", "First", "Երկրորդ", "Second")),
+    )
+    assert result[2].count(b"Transcribing...") == 2, (
+        "live terminal lost a phase transition between segments"
+    )
+
+
+def test_live_verbose_diagnostics_do_not_overwrite_status(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = interact(
+        home,
+        (0.2,) * 3_200,
+        "--verbose",
+        additions=speech(tmp_path, ("Բարեւ #err", "Hello")),
+    )
+    marker = b"\x1b[2Kcleanup: omitted non-speech model output\r\n\r\x1b[2K"
+    assert marker in result[2], "verbose cleanup corrupted transient live status"
+
+
+def test_live_fatal_diagnostic_clears_transient_status(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    additions = speech(tmp_path, ("Չօգտագործված",))
+    additions["CARAWAY_RUNTIME_FAIL_INDEX"] = "0"
+    result = interact(home, (0.2,) * 3_200, additions=additions)
+    assert b"\x1b[2Ktranscription_failed:" in result[2], (
+        "fatal live diagnostic overwrote transient status"
+    )
+
+
+def test_live_overload_diagnostic_clears_transient_status(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    result = interact(
+        home,
+        (0.2,) * 160_000,
+        "--buffer-seconds",
+        "0.02",
+        additions=speech(tmp_path, ("Չօգտագործված",)),
+    )
+    assert b"\x1b[2Koverload:" in result[2], (
+        "live overload diagnostic overwrote transient status"
+    )
+
+
+def test_live_interrupt_reports_one_human_completion(tmp_path: Path) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    config = home / f"կարգավորում-{uuid4()}.toml"
+    config.write_text(
+        f'cache_dir = "{home / "Library" / "Caches" / "caraway"}"\n',
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment["HOME"] = str(home)
+    environment.update(speech(tmp_path, ("Չօգտագործված",)))
+    command = Path(sys.executable).with_name("caraway")
+    with subprocess.Popen(
+        (command, "--config", config, "live", "--input-format", "f32le", "-"),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=environment,
+    ) as process:
+        time.sleep(0.2)
+        process.send_signal(2)
+        stdout, stderr = process.communicate(timeout=5)
+    assert (process.returncode, stdout, stderr) == (
+        130,
+        b"",
+        b"Stopped. 0 segments transcribed, 0 cleaned up.\n",
+    ), "live interrupt emitted duplicate or internal lifecycle diagnostics"
+
+
+def test_live_cleanup_is_quiet_by_default_and_plain_in_verbose_mode(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    additions = speech(tmp_path, ("Բարեւ #err", "Hello"))
+    regular = live(home, (0.2,) * 3_200, additions=additions)
+    verbose = live(home, (0.2,) * 3_200, "--verbose", additions=additions)
+    assert (
+        regular.stderr,
+        verbose.stderr.endswith(b"cleanup: omitted non-speech model output\n"),
+    ) == (
+        b"",
+        True,
+    ), "live cleanup diagnostics exposed implementation details"
 
 
 @pytest.mark.parametrize("arguments", ((), ("--input-format", "s16le", "-")))

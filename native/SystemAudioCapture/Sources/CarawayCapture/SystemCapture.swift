@@ -80,7 +80,7 @@ final class SystemCapture: NSObject, SCStreamDelegate, SCStreamOutput {
     guard outputType == .audio else { return }
     do {
       let data = try conversion.convert(sampleBuffer)
-      if !data.isEmpty, !recordedFirstPCM {
+      if verbose, !data.isEmpty, !recordedFirstPCM {
         recordedFirstPCM = true
         writeDiagnostic("first_pcm: uptime_seconds=\(ProcessInfo.processInfo.systemUptime)")
       }
@@ -140,7 +140,9 @@ final class SystemCapture: NSObject, SCStreamDelegate, SCStreamOutput {
       } catch {
         ending = .outputFailure
       }
-      writeDiagnostic("capture_stopped: reason=\(ending.code) capture_queue_peak=\(pcm.peak)")
+      if verbose {
+        writeDiagnostic("capture_stopped: reason=\(ending.code) capture_queue_peak=\(pcm.peak)")
+      }
       takeContinuation()?.resume(returning: ending)
     }
   }
