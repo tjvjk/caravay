@@ -34,12 +34,15 @@ def invoke(
     command: Path,
     events: list[dict[str, object]],
     extra_environment: dict[str, str] | None = None,
+    *arguments: str,
 ) -> subprocess.CompletedProcess[bytes]:
     """Run one controlled capture script without ScreenCaptureKit permission."""
     environment = os.environ.copy()
     environment["CARAWAY_CAPTURE_TEST_EVENTS"] = json.dumps(events)
     environment.update(extra_environment or {})
-    return subprocess.run(command, env=environment, capture_output=True, check=False)
+    return subprocess.run(
+        (command, *arguments), env=environment, capture_output=True, check=False
+    )
 
 
 def test_success_writes_only_mono_float32_pcm_to_stdout(
@@ -200,7 +203,32 @@ def test_interruption_drains_accepted_pcm_and_exits_130(capture_command: Path) -
 
     assert result.returncode == 130
     assert struct.unpack("<2f", result.stdout) == pytest.approx((0.5, -0.5))
-    assert result.stderr.endswith(b"interrupted: capture stopped by SIGINT\n")
+    assert result.stderr == b"capturing system audio; press Ctrl-C to stop\n"
+
+
+def test_verbose_capture_retains_measurement_diagnostics(
+    capture_command: Path,
+) -> None:
+    """Expose native termination detail only through explicit diagnostics."""
+    result = invoke(
+        capture_command,
+        [
+            {
+                "type": "audio",
+                "sample_rate": 16_000,
+                "channels": 1,
+                "samples": [0.5, -0.5],
+            },
+            {"type": "interruption"},
+        ],
+        None,
+        "--verbose",
+    )
+    assert (
+        result.returncode,
+        b"capture_queue_peak=" in result.stderr,
+        result.stderr.endswith(b"interrupted: capture stopped by SIGINT\n"),
+    ) == (130, True, True), "verbose capture hid acceptance diagnostics"
 
 
 def test_fragmented_output_write_failure_is_reported(capture_command: Path) -> None:

@@ -323,6 +323,8 @@ def interrupt(
         (),
         live.Terminal("interruption", 0),
     )
+    if not arguments.quiet:
+        print("Stopped. 0 segments transcribed, 0 cleaned up.", file=sys.stderr)
     return 130
 
 
@@ -350,9 +352,25 @@ def finish(
     setup: Setup,
     results: tuple[execution.Result, ...],
     terminal: live.Terminal,
+    presentation: live.Presentation,
 ) -> int:
     """Serialize live completion and return its stable exit status."""
+    live.dismiss(presentation)
     live.terminal(sys.stdout, arguments.format, setup.prepared.plan, results, terminal)
+    if terminal.completion == "interruption" and not arguments.quiet:
+        cleaned = sum(
+            any(
+                problem.code in ("generation_artifact", "repetition")
+                for problem in result.issues
+            )
+            for result in results
+        )
+        transcribed = sum(bool(result.transcript) for result in results)
+        noun = "segment" if transcribed == 1 else "segments"
+        print(
+            f"Stopped. {transcribed} {noun} transcribed, {cleaned} cleaned up.",
+            file=sys.stderr,
+        )
     if terminal.completion in ("overload", "failure"):
         return 1
     if terminal.completion == "interruption":
@@ -375,17 +393,19 @@ def stream(arguments: argparse.Namespace, config: Settings) -> int:
         return interrupt(arguments, setup, capture)
     except Exception as error:
         return fail(arguments, setup, capture, error)
+    presentation = live.present(sys.stderr, not arguments.quiet and sys.stderr.isatty())
     results, terminal = live.execute(
         capture,
         sys.stdin.buffer,
         sys.stdout,
-        sys.stderr,
+        presentation,
         setup.prepared,
         loaded,
         setup.options,
         arguments.format,
+        arguments.verbose,
     )
-    return finish(arguments, setup, results, terminal)
+    return finish(arguments, setup, results, terminal, presentation)
 
 
 def main() -> int:

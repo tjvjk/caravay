@@ -1,6 +1,8 @@
 import Darwin
 import Foundation
 
+let verbose = CommandLine.arguments.dropFirst() == ["--verbose"]
+
 #if DEBUG
   private struct ScriptEvent: Decodable {
     enum Kind: String, Decodable {
@@ -124,6 +126,10 @@ enum CaptureError: Error, Equatable {
     } catch {
       queue.finish()
       try? writer.wait()
+      if verbose {
+        let reason = (error as? CaptureError)?.code ?? "capture_failed"
+        writeDiagnostic("capture_stopped: reason=\(reason) capture_queue_peak=\(queue.peak)")
+      }
       throw error
     }
     queue.finish()
@@ -140,10 +146,14 @@ do {
       exit(0)
     }
   #endif
-  guard CommandLine.arguments.count == 1 else { throw CaptureError.invalidArguments }
+  guard CommandLine.arguments.count == 1 || verbose else {
+    throw CaptureError.invalidArguments
+  }
   try runSystemCapture()
 } catch {
   let message = (error as? CaptureError)?.diagnostic ?? "capture_failed: \(error)"
-  writeDiagnostic(message)
+  if (error as? CaptureError) != .interrupted || verbose {
+    writeDiagnostic(message)
+  }
   exit((error as? CaptureError) == .interrupted ? 130 : 1)
 }
