@@ -117,10 +117,10 @@ def snapshot(root: Path) -> Path:
 
 
 def language(value: str) -> str:
-    """Accept one canonical lowercase ISO 639-3 language code."""
-    if LANGUAGE.fullmatch(value) is None:
+    """Accept a lowercase ISO 639-3 code or the traditional Chinese model code."""
+    if value != "cmn_Hant" and LANGUAGE.fullmatch(value) is None:
         raise ValidationError(
-            f"invalid_language: {value} is not a lowercase ISO 639-3 code"
+            f"invalid_language: {value} is not a lowercase ISO 639-3 code or cmn_Hant"
         )
     return value
 
