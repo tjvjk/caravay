@@ -4,6 +4,11 @@ Caravay captures system audio on macOS and translates speech into text as you
 listen. Use it with meetings, browser videos, or any other playing audio. Once
 the model is downloaded, processing works offline.
 
+
+https://github.com/user-attachments/assets/29b18734-c232-421c-ad80-2cc18e2be400
+
+Caravay live translation demo
+
 ## Live translation of system audio
 
 After the [first-time setup](#installation-and-first-run), start capture and
