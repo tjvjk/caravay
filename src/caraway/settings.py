@@ -13,6 +13,7 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
+LANGUAGES: Final = ("hye", "kaz", "rus", "eng", "deu", "tur", "fra", "spa")
 DEFAULT_BACKEND: Final = "seamlessm4t-large-v2"
 MODEL_REPOSITORY: Final = "facebook/seamless-m4t-v2-large"
 MODEL_REVISION: Final = "5f8cc790b19fc3f67a61c105133b20b34e3dcb76"
