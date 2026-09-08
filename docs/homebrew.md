@@ -18,7 +18,7 @@ shasum -a 256 dist/caravay-*.whl
 
 Use a clean output directory so only the intended version is uploaded. Attach
 the wheel to the matching GitHub release (`v<version>`), and update the formula's
-`url`, `version`, and `sha256`. Never overwrite an existing release asset with
+`url` and `sha256` (the version is inferred from the URL). Never overwrite an existing release asset with
 different bytes.
 
 The formula's resource URLs and SHA-256 hashes come from `uv.lock`. When
