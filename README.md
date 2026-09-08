@@ -1,6 +1,6 @@
-# Caraway
+# Caravay
 
-Caraway captures system audio on macOS and translates speech into text as you
+Caravay captures system audio on macOS and translates speech into text as you
 listen. Use it with meetings, browser videos, or any other playing audio. Once
 the model is downloaded, processing works offline.
 
@@ -11,18 +11,18 @@ translation from the repository root:
 
 ```console
 caravay-audio \
-  | uv run caraway live --source hye --target eng --input-format f32le -
+  | uv run caravay live --source hye --target eng --input-format f32le -
 ```
 
 This translates Armenian speech into English text. Play your meeting or video
-normally: audio remains audible through the selected output device, and Caraway
+normally: audio remains audible through the selected output device, and Caravay
 prints each translated segment as it becomes ready. Stop with `Ctrl-C`.
 
 To display the live translation and save it to a text file at the same time:
 
 ```console
 caravay-audio \
-  | uv run caraway live --source hye --target eng --input-format f32le - \
+  | uv run caravay live --source hye --target eng --input-format f32le - \
   | tee translation.txt
 ```
 
@@ -34,20 +34,20 @@ automatic language detection. See [supported languages](#supported-languages).
 
 ## Audio files
 
-Audio files can be processed much faster than real time: Caraway processes the
+Audio files can be processed much faster than real time: Caravay processes the
 recording without waiting for it to play. Actual speed depends on your Mac, the
 recording, and the selected languages; the first run also includes model loading.
 
 Translate speech from a local audio file and save the result:
 
 ```console
-uv run caraway run --source kaz --target rus meeting.wav > translation.txt
+uv run caravay run --source kaz --target rus meeting.wav > translation.txt
 ```
 
 For transcription in the original language, only `--source` is needed:
 
 ```console
-uv run caraway transcribe --source kaz meeting.wav > transcript.txt
+uv run caravay transcribe --source kaz meeting.wav > transcript.txt
 ```
 
 ## Text translation
@@ -55,7 +55,7 @@ uv run caraway transcribe --source kaz meeting.wav > transcript.txt
 Translate a UTF-8 file and save the result:
 
 ```console
-uv run caraway translate --source hye --target eng armenian.txt > english.txt
+uv run caravay translate --source hye --target eng armenian.txt > english.txt
 ```
 
 Remove `> filename` from these examples to print the result in the terminal.
@@ -108,8 +108,8 @@ uv sync --python 3.13
 This is the large download needed before offline processing:
 
 ```console
-uv run caraway models download
-uv run caraway models status
+uv run caravay models download
+uv run caravay models status
 ```
 
 Status should be `ready`. If installation was interrupted or the cache is invalid,
@@ -137,7 +137,7 @@ command again and play your audio.
 
 - If recording permission is denied, enable it in macOS settings and restart
   Terminal if asked.
-- If the model is missing or invalid, run `uv run caraway models download` again.
+- If the model is missing or invalid, run `uv run caravay models download` again.
 - If processing reports `overload`, your Mac is not keeping up with live audio.
   File processing may still work.
 

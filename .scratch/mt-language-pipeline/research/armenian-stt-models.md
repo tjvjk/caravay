@@ -4,7 +4,7 @@ Research date: 2026-09-04
 
 ## Decision summary
 
-For the next Caraway spike, benchmark these three routes on the **same Eastern Armenian corpus**:
+For the next Caravay spike, benchmark these three routes on the **same Eastern Armenian corpus**:
 
 1. **`ArthurYeghinyan/whisper-hy-am-asr-v2`** — best first challenger to the current pipeline: Armenian Whisper Medium fine-tune, ordinary Transformers checkpoint, and a reported ~17% WER. Its published evaluation is only 256 Common Voice dev samples and the repository does not declare a license, so it is an experimental quality signal, not a release-ready dependency.
 2. **`Yeroyan/stt_arm_conformer_ctc_large`** — strongest Armenian-specific published number found: 15.0% WER / 12.44% without punctuation on Common Voice 17, with Eastern Armenian explicitly named. Benchmark it if the gated download and CC-BY-NC-4.0 license are acceptable. NeMo is a poor native-Mac product dependency, but the 487 MB checkpoint is realistic for a CPU proof of concept.
@@ -12,7 +12,7 @@ For the next Caraway spike, benchmark these three routes on the **same Eastern A
 
 Keep **Meta MMS-1B-all (`hye`)** as a fourth experiment if time permits. It explicitly separates Eastern Armenian (`hye`) from Western Armenian (`hyw`), but is a 1B-parameter F32 model, non-commercially licensed, and its official card does not publish Armenian-specific WER. Do not spend more time on Vosk unless a third-party Armenian model appears: the official model catalog has no Armenian pack.
 
-SeamlessM4T v2 remains useful when one checkpoint must also translate, but it is unnecessarily large for ASR-only use and already performed poorly enough in the local Caraway spike to justify testing specialist ASR models.
+SeamlessM4T v2 remains useful when one checkpoint must also translate, but it is unnecessarily large for ASR-only use and already performed poorly enough in the local Caravay spike to justify testing specialist ASR models.
 
 ## Comparison
 
@@ -22,8 +22,8 @@ SeamlessM4T v2 remains useful when one checkpoint must also translate, but it is
 | `ArthurYeghinyan/whisper-hy-am-asr-v2` | Card says Armenian (`hy`); trained on Common Voice 25 Armenian, Grqaser, and generated Armenian audio. It does **not** explicitly state Eastern Armenian. | Whisper Medium fine-tune, ~0.8B params, F32 safetensors | **Not specified in model card** | Good prototype path through Transformers/PyTorch MPS; conversion to MLX or whisper.cpp is not supplied and must be validated | Best observed ~17% WER on a fixed 256-sample CV25 Armenian dev subset | Tiny/nonstandard evaluation; synthetic-data bias; no license; only 11 monthly downloads at research time; no Mac measurements |
 | `Yeroyan/stt_arm_conformer_ctc_large` | Card explicitly lists **Eastern Armenian** and fine-tuning on Common Voice 17 Armenian | Conformer CTC large; `.nemo` file ~487 MB; SentencePiece vocab 128 | CC-BY-NC-4.0 | NeMo/PyTorch; CPU inference is plausible at this size, but official path is NVIDIA-centric and there is no documented MLX/Metal/whisper.cpp export | 15.0% WER and 12.44% WER without punctuation on MCV17 test | Gated checkpoint; non-commercial; `եւ`→`և` post-processing required; heavyweight NeMo dependency; no Mac benchmark |
 | Meta MMS-1B-all | Official adapter list contains both `hye` (Eastern Armenian ISO 639-3) and `hyw` (Western Armenian) | wav2vec2-style CTC with language adapters; 1B params, F32 | CC-BY-NC-4.0 | Transformers `Wav2Vec2ForCTC`; MPS/CPU may work, but no first-party Apple-optimized runtime or Armenian Mac benchmark was found | Official card gives aggregate/open-leaderboard values, not an Armenian-specific WER; do not reuse those numbers as Armenian quality | 1B base is heavy for ASR; non-commercial; CTC loses punctuation/casing unless restored; adapter/runtime behavior must be tested on MPS |
-| Meta SeamlessM4T v2 Large | Official table lists `hye` Armenian as speech and text source and text target; dialect is not distinguished | UnitY2 multitask encoder-decoder, 2.3B params; checkpoint files roughly 9–11 GB | CC-BY-NC-4.0 | Transformers/PyTorch CPU or MPS; the existing Caraway prototype proves offline execution, but it is slow/heavy | Meta publishes aggregate FLEURS/CoVoST2/CVSS metrics, not an Armenian ASR scalar in the card | Non-commercial; over-sized for ASR-only; local output quality already questionable; complex generation path |
-| `Center-of-Advanced-Software-Technologies/whisper-large-v3-mwa-hy` | Explicitly **Modern Western Armenian**, therefore mismatched to Caraway's Eastern Armenian target | Whisper Large v3 fine-tune; card reports 2B/F32; repository ~12.4 GB | CC-BY-4.0 | Transformers/PyTorch; example falls back to CPU on Mac; standard-format safetensors now exist, but large footprint | Only two qualitative example transcriptions; no WER/CER | Wrong dialect; huge; card example originally used unsafe pickle loading; no quantitative evaluation |
+| Meta SeamlessM4T v2 Large | Official table lists `hye` Armenian as speech and text source and text target; dialect is not distinguished | UnitY2 multitask encoder-decoder, 2.3B params; checkpoint files roughly 9–11 GB | CC-BY-NC-4.0 | Transformers/PyTorch CPU or MPS; the existing Caravay prototype proves offline execution, but it is slow/heavy | Meta publishes aggregate FLEURS/CoVoST2/CVSS metrics, not an Armenian ASR scalar in the card | Non-commercial; over-sized for ASR-only; local output quality already questionable; complex generation path |
+| `Center-of-Advanced-Software-Technologies/whisper-large-v3-mwa-hy` | Explicitly **Modern Western Armenian**, therefore mismatched to Caravay's Eastern Armenian target | Whisper Large v3 fine-tune; card reports 2B/F32; repository ~12.4 GB | CC-BY-4.0 | Transformers/PyTorch; example falls back to CPU on Mac; standard-format safetensors now exist, but large footprint | Only two qualitative example transcriptions; no WER/CER | Wrong dialect; huge; card example originally used unsafe pickle loading; no quantitative evaluation |
 | `Chillarmo/whisper-small-hy-AM` | Armenian (`hy-AM`) trained on Common Voice 16.1; dialect not explicitly stated | Whisper Small fine-tune, ~244M params, F32 | Apache-2.0 | Transformers/PyTorch MPS/CPU; small enough for a practical Mac test | 38.116 WER on its evaluation set | Published WER is weak; old/limited training data; no external or Eastern-Armenian test |
 | `alphaedge-ai/whisper-medium-hye-32768` | Armenian-targeted vocabulary trimming, tagged `hye`; this is a trimmed base, not evidence of Armenian acoustic fine-tuning | 2.56% vocabulary-trimmed Whisper Medium; encoder remains Medium-sized | Apache-2.0 per card metadata | Standard Transformers checkpoint; likely lower decoder/storage cost; MPS should be tested | No Armenian WER reported in the card found | Trimming does not create Armenian competence; quality unknown; no MLX/whisper.cpp artifact |
 | Vosk/Kaldi official models | Official Vosk catalog lists 20+ language families but **no Armenian model** | Kaldi TDNN/HMM models vary from ~50 MB mobile to multi-GB server packs | Per model; commonly Apache-2.0 | Vosk itself is excellent offline and supports macOS/mobile | None for Armenian because no official pack exists | Would require finding/auditing a third-party pack or training one; not an MVP shortcut |
@@ -39,7 +39,7 @@ Apple Silicon has two mature offline paths:
 - Apple's `ml-explore/mlx-examples` documents `pip install mlx-whisper` and local CLI/API transcription for Whisper. This is the lowest-friction Python benchmark path on Apple Silicon.
 - `ggml-org/whisper.cpp` calls Apple Silicon a first-class target, uses ARM NEON, Accelerate and Metal, supports quantized models, and can offload the encoder to Core ML/ANE. This is the strongest eventual native/CLI deployment path.
 
-The important gap is quality evidence. OpenAI says performance varies widely by language and publishes CV15/FLEURS plots, but does not make a clear Eastern Armenian claim. Therefore test at least `small`, `medium`, and `large-v3` or `turbo` on Caraway's conversational Eastern Armenian. Note that `turbo` is for transcription, not speech translation; that is fine for the intended STT→text-translation cascade.
+The important gap is quality evidence. OpenAI says performance varies widely by language and publishes CV15/FLEURS plots, but does not make a clear Eastern Armenian claim. Therefore test at least `small`, `medium`, and `large-v3` or `turbo` on Caravay's conversational Eastern Armenian. Note that `turbo` is for transcription, not speech translation; that is fine for the intended STT→text-translation cascade.
 
 Sources: [OpenAI Whisper repository and size table](https://github.com/openai/whisper), [official tokenizer language mapping](https://github.com/openai/whisper/blob/main/whisper/tokenizer.py), [Whisper large-v3 model card](https://huggingface.co/openai/whisper-large-v3), [Apple MLX Whisper example](https://github.com/ml-explore/mlx-examples/tree/main/whisper), [whisper.cpp](https://github.com/ggml-org/whisper.cpp).
 
@@ -63,13 +63,13 @@ Source: [Yeroyan Armenian Conformer CTC model card](https://huggingface.co/Yeroy
 
 `facebook/mms-1b-all` is a 1B-parameter wav2vec2/CTC ASR checkpoint with language adapters. The official supported-language list includes `hye` and `hyw`, which is valuable because ISO 639-3 identifies them separately as Eastern and Western Armenian. Transformers supports swapping adapters with `load_adapter()` and `set_target_lang()`.
 
-The model is F32 and CC-BY-NC-4.0. It should be possible to attempt PyTorch MPS or CPU inference, but no official Apple-optimized runtime or Armenian-on-Mac result was found. The model card's displayed aggregate/open-leaderboard metrics are not Armenian-specific and are not evidence that it beats specialist checkpoints on Caraway's data.
+The model is F32 and CC-BY-NC-4.0. It should be possible to attempt PyTorch MPS or CPU inference, but no official Apple-optimized runtime or Armenian-on-Mac result was found. The model card's displayed aggregate/open-leaderboard metrics are not Armenian-specific and are not evidence that it beats specialist checkpoints on Caravay's data.
 
 Sources: [MMS-1B-all model card and adapter list](https://huggingface.co/facebook/mms-1b-all), [MMS paper](https://arxiv.org/abs/2305.13516), [Transformers MMS documentation](https://huggingface.co/docs/transformers/model_doc/mms).
 
 ### 5. SeamlessM4T
 
-The official SeamlessM4T v2 card lists Armenian (`hye`) for source speech, source text, and target text. Large v2 is a 2.3B-parameter UnitY2 multitask model under CC-BY-NC-4.0. It runs through Transformers, and Caraway already proved local CPU/MPS execution. It remains the only candidate here that natively combines ASR and translation, but that advantage is irrelevant if a cascade is chosen and its Armenian ASR is weak. It is also much larger than a specialist CTC model or Whisper Small/Medium.
+The official SeamlessM4T v2 card lists Armenian (`hye`) for source speech, source text, and target text. Large v2 is a 2.3B-parameter UnitY2 multitask model under CC-BY-NC-4.0. It runs through Transformers, and Caravay already proved local CPU/MPS execution. It remains the only candidate here that natively combines ASR and translation, but that advantage is irrelevant if a cascade is chosen and its Armenian ASR is weak. It is also much larger than a specialist CTC model or Whisper Small/Medium.
 
 Sources: [SeamlessM4T v2 Large model card](https://huggingface.co/facebook/seamless-m4t-v2-large), [Seamless paper](https://arxiv.org/abs/2312.05187).
 
@@ -101,7 +101,7 @@ GiB peak RSS, but produced unusable mixed-script hallucinations and extensive
 repetition both with and without previous-window text conditioning. The local
 result rejects generic Turbo for this corpus and raises the priority of the
 Armenian Whisper fine-tune; it does not establish the quality of generic Large
-v3. See [`whisper-prototype-results.md`](../../caraway-offline-armenian-mvp/whisper-prototype-results.md).
+v3. See [`whisper-prototype-results.md`](../../caravay-offline-armenian-mvp/whisper-prototype-results.md).
 
 The recommended Armenian fine-tune was also tested. It produced Armenian-only,
 often recognizable text, but repeated a token four or more consecutive times

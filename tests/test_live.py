@@ -14,10 +14,10 @@ import pytest
 
 @pytest.mark.skipif(
     not {
-        "CARAWAY_REAL_MODEL_CONFIG",
-        "CARAWAY_REAL_AUDIO",
-        "CARAWAY_LIVE_REPORT",
-        "CARAWAY_LIVE_NOTES",
+        "CARAVAY_REAL_MODEL_CONFIG",
+        "CARAVAY_REAL_AUDIO",
+        "CARAVAY_LIVE_REPORT",
+        "CARAVAY_LIVE_NOTES",
     }.issubset(os.environ),
     reason="paced live acceptance and report are opt-in",
 )
@@ -29,7 +29,7 @@ def test_paced_live_audio_emits_before_capture_finishes() -> None:
             "ffmpeg",
             "-re",
             "-i",
-            os.environ["CARAWAY_REAL_AUDIO"],
+            os.environ["CARAVAY_REAL_AUDIO"],
             "-f",
             "f32le",
             "-ac",
@@ -42,12 +42,12 @@ def test_paced_live_audio_emits_before_capture_finishes() -> None:
         stderr=subprocess.PIPE,
     )
     assert producer.stdout is not None
-    command = Path(sys.executable).with_name("caraway")
+    command = Path(sys.executable).with_name("caravay")
     consumer = subprocess.Popen(
         (
             command,
             "--config",
-            os.environ["CARAWAY_REAL_MODEL_CONFIG"],
+            os.environ["CARAVAY_REAL_MODEL_CONFIG"],
             "live",
             "--source",
             "hye",
@@ -79,10 +79,10 @@ def test_paced_live_audio_emits_before_capture_finishes() -> None:
         "result_latency_ms": [record["latency_ms"] for record in segments],
         "maximum_backlog_frames": terminal["maximum_backlog_frames"],
         "total_wall_seconds": time.monotonic() - started,
-        "operator_notes": os.environ["CARAWAY_LIVE_NOTES"],
+        "operator_notes": os.environ["CARAVAY_LIVE_NOTES"],
         "stderr": errors,
     }
-    Path(os.environ["CARAWAY_LIVE_REPORT"]).write_text(
+    Path(os.environ["CARAVAY_LIVE_REPORT"]).write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     artifact = re.compile(r"(?<![\w#])#(?:err|er)(?![\w#])|#{8,}")

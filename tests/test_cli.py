@@ -1,4 +1,4 @@
-"""Test Caraway through its public subprocess interface."""
+"""Test Caravay through its public subprocess interface."""
 
 import json
 import os
@@ -17,7 +17,7 @@ from uuid import uuid4
 
 import pytest
 
-from caraway.cli import parser
+from caravay.cli import parser
 
 
 def invoke(
@@ -35,7 +35,7 @@ def invoke(
     environment["CACHE_DIR"] = str(home / f"չթույլատրված-{uuid4()}")
     if additions is not None:
         environment.update(additions)
-    executable = str(Path(sys.executable).with_name("caraway"))
+    executable = str(Path(sys.executable).with_name("caravay"))
     command = (
         (executable, *arguments)
         if network
@@ -94,16 +94,16 @@ def snapshot_download(
     **options: Any,
 ) -> str:
     root = Path(local_dir)
-    fixture = Path(os.environ["CARAWAY_HUB_FIXTURE"])
+    fixture = Path(os.environ["CARAVAY_HUB_FIXTURE"])
     fixture.mkdir(parents=True, exist_ok=True)
-    if not os.environ.get("CARAWAY_PROGRESS_DISABLED"):
+    if not os.environ.get("CARAVAY_PROGRESS_DISABLED"):
         print("controlled progress", file=__import__("sys").stderr)
     request = {"repo_id": repo_id, "revision": revision, "files": allow_patterns}
     fixture.joinpath("request.json").write_text(json.dumps(request), encoding="utf-8")
-    if seconds := os.environ.get("CARAWAY_HUB_SLEEP"):
+    if seconds := os.environ.get("CARAVAY_HUB_SLEEP"):
         import time
         time.sleep(float(seconds))
-    if os.environ.get("CARAWAY_HUB_FAIL") == "before":
+    if os.environ.get("CARAVAY_HUB_FAIL") == "before":
         raise RuntimeError("controlled network failure")
     for name in allow_patterns:
         target = root / name
@@ -113,11 +113,11 @@ def snapshot_download(
         else:
             content = (
                 "corrupt"
-                if os.environ.get("CARAWAY_HUB_CORRUPT")
+                if os.environ.get("CARAVAY_HUB_CORRUPT")
                 else "fixture:" + name
             )
             target.write_bytes(content.encode())
-        if os.environ.get("CARAWAY_HUB_FAIL") == "after_first":
+        if os.environ.get("CARAVAY_HUB_FAIL") == "after_first":
             raise RuntimeError("controlled interrupted transfer")
     return str(root)
 ''',
@@ -129,7 +129,7 @@ def snapshot_download(
     utilities.joinpath("tqdm.py").write_text(
         '"""Controlled progress fixture."""\n\n'
         "import os\n\ndef disable_progress_bars() -> bool:\n"
-        '    os.environ["CARAWAY_PROGRESS_DISABLED"] = "1"\n'
+        '    os.environ["CARAVAY_PROGRESS_DISABLED"] = "1"\n'
         "    return True\n",
         encoding="utf-8",
     )
@@ -139,13 +139,13 @@ import os
 import pathlib
 import shutil
 
-if os.environ.get("CARAWAY_LOW_SPACE"):
+if os.environ.get("CARAVAY_LOW_SPACE"):
     usage = shutil._ntuple_diskusage(1024, 1023, 1)
     def disk_usage(path: str) -> tuple[int, int, int]:
         return usage
     shutil.disk_usage = disk_usage
 
-if os.environ.get("CARAWAY_PUBLISH_FAIL"):
+if os.environ.get("CARAVAY_PUBLISH_FAIL"):
     replace = pathlib.Path.replace
     def fail(source: pathlib.Path, target: pathlib.Path) -> pathlib.Path:
         if source.name.endswith(".partial"):
@@ -158,7 +158,7 @@ if os.environ.get("CARAWAY_PUBLISH_FAIL"):
     fixture = tmp_path / f"сервер-{uuid4()}"
     additions = {
         "PYTHONPATH": str(package.parent),
-        "CARAWAY_HUB_FIXTURE": str(fixture),
+        "CARAVAY_HUB_FIXTURE": str(fixture),
     }
     return fixture, additions
 
@@ -167,7 +167,7 @@ def status(home: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     """Invoke model status with an explicit isolated cache configuration."""
     config = home / f"կարգավորում-{uuid4()}.toml"
     config.parent.mkdir(parents=True, exist_ok=True)
-    cache = home / "Library" / "Caches" / "caraway"
+    cache = home / "Library" / "Caches" / "caravay"
     config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
     return invoke(home, "--config", str(config), "models", "status", *arguments)
 
@@ -178,7 +178,7 @@ def publish(home: Path) -> Path:
         home
         / "Library"
         / "Caches"
-        / "caraway"
+        / "caravay"
         / "seamlessm4t-large-v2"
         / "5f8cc790b19fc3f67a61c105133b20b34e3dcb76"
     )
@@ -225,7 +225,7 @@ from types import SimpleNamespace
 
 float16 = "float16"
 backends = SimpleNamespace(
-    mps=SimpleNamespace(is_available=lambda: os.environ.get("CARAWAY_MPS") == "1")
+    mps=SimpleNamespace(is_available=lambda: os.environ.get("CARAVAY_MPS") == "1")
 )
 
 class inference_mode:
@@ -269,7 +269,7 @@ class AutoProcessor:
     index = 0
     @classmethod
     def from_pretrained(cls, path, **options):
-        if os.environ.get("CARAWAY_RUNTIME_FAIL") == "load":
+        if os.environ.get("CARAVAY_RUNTIME_FAIL") == "load":
             raise RuntimeError("controlled model loading failure")
         if (
             not options.get("local_files_only")
@@ -288,7 +288,7 @@ class AutoProcessor:
                     f"type={type(options['audio'])}"
                 )
             return Batch(input_features=Tensor())
-        if expected := os.environ.get("CARAWAY_EXPECT_TEXT"):
+        if expected := os.environ.get("CARAVAY_EXPECT_TEXT"):
             if options.get("text") != expected:
                 raise RuntimeError("translation received damaged transcript")
         return Batch(options)
@@ -297,8 +297,8 @@ class AutoProcessor:
             print("controlled BPE warning", file=sys.stderr)
         outputs = __import__("json").loads(
             os.environ.get(
-                "CARAWAY_OUTPUTS",
-                __import__("json").dumps([os.environ["CARAWAY_OUTPUT"]]),
+                "CARAVAY_OUTPUTS",
+                __import__("json").dumps([os.environ["CARAVAY_OUTPUT"]]),
             )
         )
         output = outputs[AutoProcessor.index]
@@ -309,7 +309,7 @@ class SeamlessM4Tv2ForTextToText:
     generated = 0
     @classmethod
     def from_pretrained(cls, path, **options):
-        if os.environ.get("CARAWAY_RUNTIME_FAIL") == "load":
+        if os.environ.get("CARAVAY_RUNTIME_FAIL") == "load":
             raise RuntimeError("controlled model loading failure")
         if not options.get("local_files_only") or options.get("dtype") != "float16":
             raise RuntimeError("unsafe model loading options")
@@ -325,30 +325,30 @@ class SeamlessM4Tv2ForTextToText:
     def generate(self, **options):
         if (
             SeamlessM4Tv2ForTextToText.generated > 0
-            and (seconds := os.environ.get("CARAWAY_RUNTIME_DELAY_AFTER_FIRST"))
+            and (seconds := os.environ.get("CARAVAY_RUNTIME_DELAY_AFTER_FIRST"))
         ):
             Path = __import__("pathlib").Path
-            Path(os.environ["CARAWAY_LATER_STARTED"]).touch()
+            Path(os.environ["CARAVAY_LATER_STARTED"]).touch()
             __import__("time").sleep(float(seconds))
-        if os.environ.get("CARAWAY_RUNTIME_FAIL") or os.environ.get(
-            "CARAWAY_RUNTIME_FAIL_INDEX"
+        if os.environ.get("CARAVAY_RUNTIME_FAIL") or os.environ.get(
+            "CARAVAY_RUNTIME_FAIL_INDEX"
         ) == str(SeamlessM4Tv2ForTextToText.generated):
             raise RuntimeError("controlled inference failure")
         speech = "input_features" in options
         expected = os.environ.get(
-            "CARAWAY_EXPECT_SOURCE" if speech else "CARAWAY_EXPECT_TARGET",
+            "CARAVAY_EXPECT_SOURCE" if speech else "CARAVAY_EXPECT_TARGET",
             "hye" if speech else "eng",
         )
         if options.get("tgt_lang") != expected:
             raise RuntimeError("wrong target")
         if not speech and options.get("src_lang") != os.environ.get(
-            "CARAWAY_EXPECT_SOURCE", "hye"
+            "CARAVAY_EXPECT_SOURCE", "hye"
         ):
             raise RuntimeError("wrong source")
         if speech and options.get("max_new_tokens") != 256:
             raise RuntimeError("unbounded speech generation")
         SeamlessM4Tv2ForTextToText.generated += 1
-        length = 257 if os.environ.get("CARAWAY_RUNTIME_LIMITED") == "1" else 1
+        length = 257 if os.environ.get("CARAVAY_RUNTIME_LIMITED") == "1" else 1
         return [[1] * length]
 
 class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2ForTextToText):
@@ -358,8 +358,8 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2ForTextToText):
     )
     return {
         "PYTHONPATH": str(root),
-        "CARAWAY_MPS": "1",
-        "CARAWAY_OUTPUT": output,
+        "CARAVAY_MPS": "1",
+        "CARAVAY_OUTPUT": output,
     }
 
 
@@ -377,7 +377,7 @@ def audio(tmp_path: Path, seconds: int = 21) -> Path:
 def speech(tmp_path: Path, outputs: tuple[str, ...]) -> dict[str, str]:
     """Create a controlled speech runtime with one output per segment."""
     additions = runtime(tmp_path)
-    additions["CARAWAY_OUTPUTS"] = json.dumps(outputs, ensure_ascii=False)
+    additions["CARAVAY_OUTPUTS"] = json.dumps(outputs, ensure_ascii=False)
     return additions
 
 
@@ -398,7 +398,7 @@ def transcribe(
     """Invoke transcription with an explicit isolated configuration."""
     home.mkdir(parents=True, exist_ok=True)
     config = home / f"կարգավորում-{uuid4()}.toml"
-    cache = home / "Library" / "Caches" / "caraway"
+    cache = home / "Library" / "Caches" / "caravay"
     config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
     return invoke(
         home,
@@ -420,7 +420,7 @@ def run(
     """Invoke the composed pipeline with an explicit isolated configuration."""
     home.mkdir(parents=True, exist_ok=True)
     config = home / f"կարգավորում-{uuid4()}.toml"
-    cache = home / "Library" / "Caches" / "caraway"
+    cache = home / "Library" / "Caches" / "caravay"
     config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
     return invoke(
         home,
@@ -445,13 +445,13 @@ def live(
     """Invoke live translation with explicit raw PCM standard input."""
     home.mkdir(parents=True, exist_ok=True)
     config = home / f"կարգավորում-{uuid4()}.toml"
-    cache = home / "Library" / "Caches" / "caraway"
+    cache = home / "Library" / "Caches" / "caravay"
     config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
     environment = os.environ.copy()
     environment["HOME"] = str(home)
     if additions is not None:
         environment.update(additions)
-    command = Path(sys.executable).with_name("caraway")
+    command = Path(sys.executable).with_name("caravay")
     return subprocess.run(
         (
             command,
@@ -481,7 +481,7 @@ def prepare(
     """Prepare isolated live CLI configuration and environment."""
     home.mkdir(parents=True, exist_ok=True)
     config = home / f"կարգավորում-{uuid4()}.toml"
-    cache = home / "Library" / "Caches" / "caraway"
+    cache = home / "Library" / "Caches" / "caravay"
     config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
     environment = os.environ.copy()
     environment["HOME"] = str(home)
@@ -542,7 +542,7 @@ def interact(
 ) -> tuple[int, bytes, bytes]:
     """Invoke live translation with diagnostics attached to a controlled TTY."""
     config, environment = prepare(home, additions)
-    command = Path(sys.executable).with_name("caraway")
+    command = Path(sys.executable).with_name("caravay")
     master, slave = attach(columns)
     try:
         with subprocess.Popen(
@@ -686,7 +686,7 @@ def test_live_fatal_diagnostic_clears_transient_status(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
     publish(home)
     additions = speech(tmp_path, ("Չօգտագործված",))
-    additions["CARAWAY_RUNTIME_FAIL_INDEX"] = "0"
+    additions["CARAVAY_RUNTIME_FAIL_INDEX"] = "0"
     result = interact(home, (0.2,) * 3_200, additions=additions)
     assert b"\x1b[2Ktranscription_failed:" in result[2], (
         "fatal live diagnostic overwrote transient status"
@@ -713,7 +713,7 @@ def test_live_interrupt_reports_one_human_completion(tmp_path: Path) -> None:
     publish(home)
     additions = isolate(tmp_path, speech(tmp_path, ("Չօգտագործված",)))
     config, environment = prepare(home, additions)
-    command = Path(sys.executable).with_name("caraway")
+    command = Path(sys.executable).with_name("caravay")
     master, slave = attach(80)
     try:
         with subprocess.Popen(
@@ -775,7 +775,7 @@ def test_live_rejects_an_invalid_input_contract_before_model_loading(
 ) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
     additions = runtime(tmp_path)
-    additions["CARAWAY_RUNTIME_FAIL"] = "load"
+    additions["CARAVAY_RUNTIME_FAIL"] = "load"
     result = invoke(
         home,
         "live",
@@ -863,7 +863,7 @@ def test_live_stops_after_a_fatal_segment(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
     publish(home)
     additions = speech(tmp_path, ("Չօգտագործված",))
-    additions["CARAWAY_RUNTIME_FAIL_INDEX"] = "0"
+    additions["CARAVAY_RUNTIME_FAIL_INDEX"] = "0"
     result = live(
         home,
         (0.2,) * 4_800,
@@ -990,7 +990,7 @@ def test_run_marks_a_useful_generation_artifact_as_degraded(
         str(source),
         additions={
             **speech(tmp_path, ("Բարև #err, աշխարհ", "Hello, world")),
-            "CARAWAY_EXPECT_TEXT": "Բարև  , աշխարհ",
+            "CARAVAY_EXPECT_TEXT": "Բարև  , աշխարհ",
         },
     )
     record = json.loads(result.stdout.splitlines()[0])
@@ -1210,7 +1210,7 @@ def test_run_keeps_repetition_authoritative_over_a_marker(tmp_path: Path) -> Non
         str(source),
         additions={
             **speech(tmp_path, (transcript, "Useful")),
-            "CARAWAY_EXPECT_TEXT": "Օգտակար",
+            "CARAVAY_EXPECT_TEXT": "Օգտակար",
         },
     )
     record = json.loads(result.stdout.splitlines()[0])
@@ -1345,7 +1345,7 @@ def test_run_stops_after_a_fatal_translation_and_reports_it(tmp_path: Path) -> N
     publish(home)
     source = audio(tmp_path)
     additions = speech(tmp_path, ("Առաջին", "Չօգտագործված"))
-    additions["CARAWAY_RUNTIME_FAIL_INDEX"] = "1"
+    additions["CARAVAY_RUNTIME_FAIL_INDEX"] = "1"
     result = run(home, "--format", "jsonl", str(source), additions=additions)
     records = tuple(json.loads(line) for line in result.stdout.splitlines())
     assert (
@@ -1372,7 +1372,7 @@ def test_run_omits_a_transcript_after_fatal_speech_recognition(
     publish(home)
     source = audio(tmp_path, 1)
     additions = speech(tmp_path, ("Չօգտագործված",))
-    additions["CARAWAY_RUNTIME_FAIL_INDEX"] = "0"
+    additions["CARAVAY_RUNTIME_FAIL_INDEX"] = "0"
     result = run(home, "--format", "jsonl", str(source), additions=additions)
     record = json.loads(result.stdout.splitlines()[0])
     assert (
@@ -1392,7 +1392,7 @@ def test_run_model_load_failure_reports_zero_attempted_segments(
     publish(home)
     source = audio(tmp_path, 1)
     additions = speech(tmp_path, ("Չօգտագործված",))
-    additions["CARAWAY_RUNTIME_FAIL"] = "load"
+    additions["CARAVAY_RUNTIME_FAIL"] = "load"
     result = run(home, "--format", "jsonl", str(source), additions=additions)
     summary = json.loads(result.stdout)
     assert (result.returncode, summary["outcome"], summary["segments"]) == (
@@ -1407,7 +1407,7 @@ def test_run_validates_the_complete_plan_before_model_loading(tmp_path: Path) ->
     publish(home)
     source = audio(tmp_path, 1)
     additions = speech(tmp_path, ("Չօգտագործված",))
-    additions["CARAWAY_RUNTIME_FAIL"] = "load"
+    additions["CARAVAY_RUNTIME_FAIL"] = "load"
     result = run(
         home,
         "--translation-backend",
@@ -1437,7 +1437,7 @@ def test_run_rejects_invalid_input_and_languages_before_loading(
     home.joinpath("folder").mkdir(parents=True)
     source = str(audio(tmp_path, 1)) if operand == "audio" else operand
     additions = runtime(tmp_path)
-    additions["CARAWAY_RUNTIME_FAIL"] = "load"
+    additions["CARAVAY_RUNTIME_FAIL"] = "load"
     result = run(home, *arguments, source, additions=additions)
     assert (result.returncode, result.stdout) == (2, ""), (
         "invalid run input or language reached model loading"
@@ -1456,9 +1456,9 @@ def test_run_writes_deterministic_utf8_lf_output_bytes(tmp_path: Path) -> None:
         environment.update(additions)
         environment["HOME"] = str(home)
         config = home / f"կարգավորում-{uuid4()}.toml"
-        cache = home / "Library" / "Caches" / "caraway"
+        cache = home / "Library" / "Caches" / "caravay"
         config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
-        command = Path(sys.executable).with_name("caraway")
+        command = Path(sys.executable).with_name("caravay")
         results.append(
             subprocess.run(
                 (
@@ -1543,7 +1543,7 @@ def test_run_cli_route_overrides_the_configured_route_independently(
     publish(home)
     source = audio(tmp_path, 1)
     config = home / f"կարգավորում-{uuid4()}.toml"
-    cache = home / "Library" / "Caches" / "caraway"
+    cache = home / "Library" / "Caches" / "caravay"
     config.write_text(
         f'cache_dir = "{cache}"\n'
         '[commands.run]\nroute = "fused"\nbackend = "seamlessm4t-large-v2"\n',
@@ -1569,20 +1569,20 @@ def test_run_cli_route_overrides_the_configured_route_independently(
 
 
 @pytest.mark.skipif(
-    "CARAWAY_REAL_MODEL_CONFIG" not in os.environ,
+    "CARAVAY_REAL_MODEL_CONFIG" not in os.environ,
     reason="real model smoke test is opt-in",
 )
 def test_run_real_model_produces_useful_english(tmp_path: Path) -> None:
     result = invoke(
         tmp_path / f"տուն-{uuid4()}",
         "--config",
-        os.environ["CARAWAY_REAL_MODEL_CONFIG"],
+        os.environ["CARAVAY_REAL_MODEL_CONFIG"],
         "run",
         "--source",
         "hye",
         "--target",
         "eng",
-        os.environ["CARAWAY_REAL_AUDIO"],
+        os.environ["CARAVAY_REAL_AUDIO"],
         network=False,
     )
     assert (result.returncode, bool(result.stdout.strip())) == (0, True), (
@@ -1633,16 +1633,16 @@ def test_transcribe_flushes_each_completed_segment(tmp_path: Path) -> None:
     publish(home)
     source = audio(tmp_path)
     additions = speech(tmp_path, ("Առաջին", "Երկրորդ", "Երրորդ"))
-    additions["CARAWAY_RUNTIME_DELAY_AFTER_FIRST"] = "1.5"
+    additions["CARAVAY_RUNTIME_DELAY_AFTER_FIRST"] = "1.5"
     marker = tmp_path / f"հաջորդ-{uuid4()}"
-    additions["CARAWAY_LATER_STARTED"] = str(marker)
+    additions["CARAVAY_LATER_STARTED"] = str(marker)
     environment = os.environ.copy()
     environment.update(additions)
     environment["HOME"] = str(home)
     config = home / f"կարգավորում-{uuid4()}.toml"
-    cache = home / "Library" / "Caches" / "caraway"
+    cache = home / "Library" / "Caches" / "caravay"
     config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
-    command = Path(sys.executable).with_name("caraway")
+    command = Path(sys.executable).with_name("caravay")
     with subprocess.Popen(
         (
             command,
@@ -1763,7 +1763,7 @@ def test_transcribe_truncates_a_multiword_cycle_at_the_generation_limit(
         str(source),
         additions={
             **speech(tmp_path, ("Սկիզբ նայեք մինա նայեք մինա նայեք",)),
-            "CARAWAY_RUNTIME_LIMITED": "1",
+            "CARAVAY_RUNTIME_LIMITED": "1",
         },
     )
     record = json.loads(result.stdout.splitlines()[0])
@@ -1865,7 +1865,7 @@ def test_transcribe_serializes_a_fatal_partial_jsonl_outcome(
     publish(home)
     source = audio(tmp_path)
     additions = speech(tmp_path, ("Առաջին", "Չօգտագործված"))
-    additions["CARAWAY_RUNTIME_FAIL_INDEX"] = "1"
+    additions["CARAVAY_RUNTIME_FAIL_INDEX"] = "1"
     result = transcribe(home, "--format", "jsonl", str(source), additions=additions)
     records = tuple(json.loads(line) for line in result.stdout.splitlines())
     assert (
@@ -1890,7 +1890,7 @@ def test_transcribe_preserves_text_before_a_fatal_segment(tmp_path: Path) -> Non
     publish(home)
     source = audio(tmp_path)
     additions = speech(tmp_path, ("Պահպանված", "Չօգտագործված"))
-    additions["CARAWAY_RUNTIME_FAIL_INDEX"] = "1"
+    additions["CARAVAY_RUNTIME_FAIL_INDEX"] = "1"
     result = transcribe(home, str(source), additions=additions)
     assert (result.returncode, result.stdout) == (1, "Պահպանված\n"), (
         "fatal transcription discarded prior text output"
@@ -1904,7 +1904,7 @@ def test_transcribe_model_load_failure_attempts_no_jsonl_segments(
     publish(home)
     source = audio(tmp_path, 1)
     additions = speech(tmp_path, ("Չօգտագործված",))
-    additions["CARAWAY_RUNTIME_FAIL"] = "load"
+    additions["CARAVAY_RUNTIME_FAIL"] = "load"
     result = transcribe(home, "--format", "jsonl", str(source), additions=additions)
     records = tuple(json.loads(line) for line in result.stdout.splitlines())
     assert (result.returncode, len(records), records[0]["segments"]["total"]) == (
@@ -1939,18 +1939,18 @@ def test_transcribe_rejects_an_unsupported_capability(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(
-    "CARAWAY_REAL_MODEL_CONFIG" not in os.environ,
+    "CARAVAY_REAL_MODEL_CONFIG" not in os.environ,
     reason="real model smoke test is opt-in",
 )
 def test_transcribe_real_model_produces_useful_source_armenian(tmp_path: Path) -> None:
     result = invoke(
         tmp_path / f"տուն-{uuid4()}",
         "--config",
-        os.environ["CARAWAY_REAL_MODEL_CONFIG"],
+        os.environ["CARAVAY_REAL_MODEL_CONFIG"],
         "transcribe",
         "--source",
         "hye",
-        os.environ["CARAWAY_REAL_AUDIO"],
+        os.environ["CARAVAY_REAL_AUDIO"],
         network=False,
     )
     assert (result.returncode, bool(result.stdout.strip())) == (0, True), (
@@ -2035,7 +2035,7 @@ def test_translate_writes_utf8_with_a_physical_lf(tmp_path: Path) -> None:
     environment = os.environ.copy()
     environment.update(runtime(tmp_path, "English Ա"))
     environment["HOME"] = str(home)
-    command = Path(sys.executable).with_name("caraway")
+    command = Path(sys.executable).with_name("caravay")
     result = subprocess.run(
         (command, "translate", "--source", "hye", "--target", "eng", "-"),
         input="Բարև".encode(),
@@ -2107,7 +2107,7 @@ def test_translate_rejects_invalid_utf8_standard_input(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
     environment = os.environ.copy()
     environment["HOME"] = str(home)
-    command = Path(sys.executable).with_name("caraway")
+    command = Path(sys.executable).with_name("caravay")
     result = subprocess.run(
         (command, "translate", "--source", "hye", "--target", "eng", "-"),
         input=b"\xff",
@@ -2128,7 +2128,7 @@ def test_translate_omitted_operand_rejects_an_interactive_terminal(
     home.mkdir()
     environment = os.environ.copy()
     environment["HOME"] = str(home)
-    command = Path(sys.executable).with_name("caraway")
+    command = Path(sys.executable).with_name("caravay")
     master, slave = pty.openpty()
     try:
         with subprocess.Popen(
@@ -2272,7 +2272,7 @@ def test_translate_reports_unavailable_mps_without_loading_transformers(
     home = tmp_path / f"տուն-{uuid4()}"
     publish(home)
     additions = runtime(tmp_path)
-    additions["CARAWAY_MPS"] = "0"
+    additions["CARAVAY_MPS"] = "0"
     result = invoke(
         home,
         "translate",
@@ -2373,7 +2373,7 @@ def test_translate_serializes_a_processing_failure(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
     publish(home)
     additions = runtime(tmp_path)
-    additions["CARAWAY_RUNTIME_FAIL"] = "1"
+    additions["CARAVAY_RUNTIME_FAIL"] = "1"
     result = invoke(
         home,
         "translate",
@@ -2399,7 +2399,7 @@ def test_translate_serializes_a_processing_failure(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(
-    "CARAWAY_REAL_MODEL_CONFIG" not in os.environ,
+    "CARAVAY_REAL_MODEL_CONFIG" not in os.environ,
     reason="real model smoke test is opt-in",
 )
 def test_translate_real_model_produces_useful_english(tmp_path: Path) -> None:
@@ -2407,7 +2407,7 @@ def test_translate_real_model_produces_useful_english(tmp_path: Path) -> None:
     result = invoke(
         home,
         "--config",
-        os.environ["CARAWAY_REAL_MODEL_CONFIG"],
+        os.environ["CARAVAY_REAL_MODEL_CONFIG"],
         "translate",
         "--source",
         "hye",
@@ -2435,7 +2435,7 @@ def test_explicit_config_selects_its_managed_cache(tmp_path: Path) -> None:
     cache = tmp_path / f"պահոց-{uuid4()}"
     configured = cache / "home"
     publish(configured)
-    source = configured / "Library" / "Caches" / "caraway"
+    source = configured / "Library" / "Caches" / "caravay"
     source.rename(cache / "models")
     config = tmp_path / f"կարգավորում-{uuid4()}.toml"
     config.write_text(f'cache_dir = "{cache / "models"}"\n', encoding="utf-8")
@@ -2450,9 +2450,9 @@ def test_default_config_selects_its_managed_cache(tmp_path: Path) -> None:
     cache = tmp_path / f"պահոց-{uuid4()}"
     configured = cache / "home"
     publish(configured)
-    source = configured / "Library" / "Caches" / "caraway"
+    source = configured / "Library" / "Caches" / "caravay"
     source.rename(cache / "models")
-    config = home / "Library" / "Application Support" / "caraway" / "config.toml"
+    config = home / "Library" / "Application Support" / "caravay" / "config.toml"
     config.parent.mkdir(parents=True)
     config.write_text(f'cache_dir = "{cache / "models"}"\n', encoding="utf-8")
     result = invoke(home, "models", "status")
@@ -2513,7 +2513,7 @@ def test_unreadable_explicit_config_is_invalid(tmp_path: Path) -> None:
 
 def test_explicit_config_replaces_an_invalid_default(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
-    default = home / "Library" / "Application Support" / "caraway" / "config.toml"
+    default = home / "Library" / "Application Support" / "caravay" / "config.toml"
     default.parent.mkdir(parents=True)
     default.write_text("սխալ = [\n", encoding="utf-8")
     explicit = tmp_path / f"կարգավորում-{uuid4()}.toml"
@@ -2526,7 +2526,7 @@ def test_explicit_config_replaces_an_invalid_default(tmp_path: Path) -> None:
 
 def test_project_and_xdg_configs_are_not_consulted(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
-    xdg = home / "xdg" / "caraway" / "config.toml"
+    xdg = home / "xdg" / "caravay" / "config.toml"
     xdg.parent.mkdir(parents=True)
     xdg.write_text("սխալ = [\n", encoding="utf-8")
     (home / "config.toml").write_text("սխալ = [\n", encoding="utf-8")
@@ -2667,7 +2667,7 @@ def test_models_download_reuses_completed_staging_after_interruption(
         home,
         "models",
         "download",
-        additions={**additions, "CARAWAY_HUB_FAIL": "after_first"},
+        additions={**additions, "CARAVAY_HUB_FAIL": "after_first"},
     )
     resumed = invoke(home, "models", "download", additions=additions)
     assert (
@@ -2686,7 +2686,7 @@ def test_models_download_failure_does_not_publish_staging(tmp_path: Path) -> Non
         home,
         "models",
         "download",
-        additions={**additions, "CARAWAY_HUB_FAIL": "before"},
+        additions={**additions, "CARAVAY_HUB_FAIL": "before"},
     )
     state = invoke(home, "models", "status")
     assert (result.returncode, result.stdout, state.stdout) == (1, "", "missing\n"), (
@@ -2701,7 +2701,7 @@ def test_models_download_rejects_files_that_fail_verification(tmp_path: Path) ->
         home,
         "models",
         "download",
-        additions={**additions, "CARAWAY_HUB_CORRUPT": "1"},
+        additions={**additions, "CARAVAY_HUB_CORRUPT": "1"},
     )
     state = invoke(home, "models", "status")
     assert (result.returncode, result.stdout, state.stdout) == (1, "", "missing\n"), (
@@ -2720,7 +2720,7 @@ def test_models_download_is_idempotent_without_a_network_request(
         home,
         "models",
         "download",
-        additions={**additions, "CARAWAY_HUB_FAIL": "before"},
+        additions={**additions, "CARAVAY_HUB_FAIL": "before"},
     )
     assert (result.returncode, result.stdout, (fixture / "request.json").exists()) == (
         0,
@@ -2735,7 +2735,7 @@ def test_models_download_replaces_an_invalid_snapshot(tmp_path: Path) -> None:
     _, additions = hub(tmp_path)
     result = invoke(home, "models", "download", additions=additions)
     state = invoke(home, "models", "status")
-    base = home / "Library" / "Caches" / "caraway" / "seamlessm4t-large-v2"
+    base = home / "Library" / "Caches" / "caravay" / "seamlessm4t-large-v2"
     copies = tuple(path.name for path in base.iterdir() if path.is_dir())
     assert (result.returncode, state.stdout, len(copies)) == (0, "ready\n", 1), (
         "invalid replacement was not atomic and singular"
@@ -2753,7 +2753,7 @@ def test_models_download_recovers_interrupted_quarantine(tmp_path: Path) -> None
         home,
         "models",
         "download",
-        additions={**additions, "CARAWAY_HUB_FAIL": "before"},
+        additions={**additions, "CARAVAY_HUB_FAIL": "before"},
     )
     assert (
         result.returncode,
@@ -2787,8 +2787,8 @@ def test_models_download_rejects_a_concurrent_downloader(tmp_path: Path) -> None
     environment = os.environ.copy()
     environment.update(additions)
     environment["HOME"] = str(home)
-    environment["CARAWAY_HUB_SLEEP"] = "1"
-    command = Path(sys.executable).with_name("caraway")
+    environment["CARAVAY_HUB_SLEEP"] = "1"
+    command = Path(sys.executable).with_name("caravay")
     with subprocess.Popen(
         (command, "models", "download"),
         stdout=subprocess.PIPE,
@@ -2819,7 +2819,7 @@ def test_models_download_checks_free_space_before_network(tmp_path: Path) -> Non
         home,
         "models",
         "download",
-        additions={**additions, "CARAWAY_LOW_SPACE": "1"},
+        additions={**additions, "CARAVAY_LOW_SPACE": "1"},
     )
     assert (
         result.returncode,
@@ -2838,7 +2838,7 @@ def test_models_download_failure_preserves_an_invalid_snapshot(tmp_path: Path) -
         home,
         "models",
         "download",
-        additions={**additions, "CARAWAY_HUB_FAIL": "before"},
+        additions={**additions, "CARAVAY_HUB_FAIL": "before"},
     )
     assert (result.returncode, result.stdout, manifest.read_text(encoding="utf-8")) == (
         1,
@@ -2858,7 +2858,7 @@ def test_models_download_restores_an_invalid_snapshot_after_publish_failure(
         home,
         "models",
         "download",
-        additions={**additions, "CARAWAY_PUBLISH_FAIL": "1"},
+        additions={**additions, "CARAVAY_PUBLISH_FAIL": "1"},
     )
     assert (result.returncode, result.stdout, manifest.read_text(encoding="utf-8")) == (
         1,
@@ -2882,8 +2882,8 @@ def test_audio_commands_preserve_explicit_languages_through_both_stages(
     transcript = f"Сәлем {uuid4()}"
     output = f"Բարեւ {uuid4()}"
     additions = speech(tmp_path, (transcript, output))
-    additions["CARAWAY_EXPECT_SOURCE"] = source
-    additions["CARAWAY_EXPECT_TARGET"] = target
+    additions["CARAVAY_EXPECT_SOURCE"] = source
+    additions["CARAVAY_EXPECT_TARGET"] = target
     arguments = ("--source", source, "--target", target, "--format", "jsonl")
     result = (
         run(home, *arguments, str(audio(tmp_path, 1)), additions=additions)
@@ -2912,7 +2912,7 @@ def test_transcribe_passes_each_selected_language_to_recognition(
     publish(home)
     output = f"Сәлем {uuid4()}"
     additions = speech(tmp_path, (output,))
-    additions["CARAWAY_EXPECT_SOURCE"] = source
+    additions["CARAVAY_EXPECT_SOURCE"] = source
     result = transcribe(
         home, "--source", source, str(audio(tmp_path, 1)), additions=additions
     )

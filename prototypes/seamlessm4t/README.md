@@ -5,9 +5,9 @@ Run a short MPS smoke test from the repository root:
 ```sh
 .venv/bin/python \
   prototypes/seamlessm4t/run.py \
-  .scratch/caraway-offline-armenian-mvp/corpus/WncDNZDeWr0/WncDNZDeWr0_15m30s-20m30s.m4a \
+  .scratch/caravay-offline-armenian-mvp/corpus/WncDNZDeWr0/WncDNZDeWr0_15m30s-20m30s.m4a \
   --duration 20 \
-  --output .scratch/caraway-offline-armenian-mvp/results/seamlessm4t/smoke-mps.json
+  --output .scratch/caravay-offline-armenian-mvp/results/seamlessm4t/smoke-mps.json
 ```
 
 The first run downloads `facebook/hf-seamless-m4t-medium` (about 4.8 GB).

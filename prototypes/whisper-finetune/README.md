@@ -4,8 +4,8 @@ From the repository root:
 
 ```sh
 .venv/bin/python prototypes/whisper-finetune/run.py \
-  .scratch/caraway-offline-armenian-mvp/corpus/WncDNZDeWr0/WncDNZDeWr0_15m30s-20m30s.m4a \
-  --output .scratch/caraway-offline-armenian-mvp/results/whisper/armenian-medium-finetune.json
+  .scratch/caravay-offline-armenian-mvp/corpus/WncDNZDeWr0/WncDNZDeWr0_15m30s-20m30s.m4a \
+  --output .scratch/caravay-offline-armenian-mvp/results/whisper/armenian-medium-finetune.json
 ```
 
 The script runs `ArthurYeghinyan/whisper-hy-am-asr-v2` through

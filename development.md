@@ -52,7 +52,7 @@ opt-in.
 ## Native system-audio capture
 
 Install `caravay-audio` separately and follow its repository's development checks.
-Caraway consumes its documented PCM stream and does not build native Swift code.
+Caravay consumes its documented PCM stream and does not build native Swift code.
 
 ## Real system-audio acceptance
 
@@ -60,12 +60,12 @@ This opt-in test opens ScreenCaptureKit, plays audio through `afplay`, and loads
 the production model. Install `caravay-audio` on PATH, then set the six values and run:
 
 ```console
-export CARAWAY_REAL_MODEL_CONFIG=/absolute/path/to/config.toml
-export CARAWAY_REAL_AUDIO=/absolute/path/to/source-armenian.m4a
-export CARAWAY_CAPTURE_REPORT=/absolute/path/to/capture-report.json
-export CARAWAY_CAPTURE_NOTES='audible throughout; no echo or routing change'
-export CARAWAY_OUTPUT_DEVICE='name shown in System Settings > Sound'
-export CARAWAY_CAPTURE_PERMISSION_STATE='granted before test'
+export CARAVAY_REAL_MODEL_CONFIG=/absolute/path/to/config.toml
+export CARAVAY_REAL_AUDIO=/absolute/path/to/source-armenian.m4a
+export CARAVAY_CAPTURE_REPORT=/absolute/path/to/capture-report.json
+export CARAVAY_CAPTURE_NOTES='audible throughout; no echo or routing change'
+export CARAVAY_OUTPUT_DEVICE='name shown in System Settings > Sound'
+export CARAVAY_CAPTURE_PERMISSION_STATE='granted before test'
 uv run pytest tests/test_system_audio_capture_acceptance.py -q
 ```
 
@@ -89,7 +89,7 @@ To exercise live processing with a paced file producer:
 
 ```console
 ffmpeg -re -i armenian.wav -f f32le -ac 1 -ar 16000 pipe:1 \
-  | uv run caraway live --source hye --target eng --input-format f32le -
+  | uv run caravay live --source hye --target eng --input-format f32le -
 ```
 
 Default segmentation closes speech after 600 ms of silence, caps a segment at

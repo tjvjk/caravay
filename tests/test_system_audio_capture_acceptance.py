@@ -13,12 +13,12 @@ from pathlib import Path
 import pytest
 
 REQUIRED = {
-    "CARAWAY_REAL_MODEL_CONFIG",
-    "CARAWAY_REAL_AUDIO",
-    "CARAWAY_CAPTURE_REPORT",
-    "CARAWAY_CAPTURE_NOTES",
-    "CARAWAY_OUTPUT_DEVICE",
-    "CARAWAY_CAPTURE_PERMISSION_STATE",
+    "CARAVAY_REAL_MODEL_CONFIG",
+    "CARAVAY_REAL_AUDIO",
+    "CARAVAY_CAPTURE_REPORT",
+    "CARAVAY_CAPTURE_NOTES",
+    "CARAVAY_OUTPUT_DEVICE",
+    "CARAVAY_CAPTURE_PERMISSION_STATE",
 }
 
 
@@ -39,9 +39,9 @@ def test_system_audio_reaches_live_translation_before_playback_finishes() -> Non
     assert producer.stderr is not None
     consumer = subprocess.Popen(
         (
-            str(Path(sys.executable).with_name("caraway")),
+            str(Path(sys.executable).with_name("caravay")),
             "--config",
-            os.environ["CARAWAY_REAL_MODEL_CONFIG"],
+            os.environ["CARAVAY_REAL_MODEL_CONFIG"],
             "live",
             "--source",
             "hye",
@@ -72,7 +72,7 @@ def test_system_audio_reaches_live_translation_before_playback_finishes() -> Non
     capture_started = time.monotonic()
     initial_diagnostic = producer.stderr.readline().decode()
     assert initial_diagnostic.startswith("capturing system audio")
-    playback = subprocess.Popen(("afplay", os.environ["CARAWAY_REAL_AUDIO"]))
+    playback = subprocess.Popen(("afplay", os.environ["CARAVAY_REAL_AUDIO"]))
     playback_started = time.monotonic()
     playback.wait(timeout=600)
     playback_finished = time.monotonic()
@@ -97,8 +97,8 @@ def test_system_audio_reaches_live_translation_before_playback_finishes() -> Non
     early_segments = [record for record in early_records if record["type"] == "segment"]
     report = {
         "macos_version": platform.mac_ver()[0],
-        "output_audio_device": os.environ["CARAWAY_OUTPUT_DEVICE"],
-        "permission_state": os.environ["CARAWAY_CAPTURE_PERMISSION_STATE"],
+        "output_audio_device": os.environ["CARAVAY_OUTPUT_DEVICE"],
+        "permission_state": os.environ["CARAVAY_CAPTURE_PERMISSION_STATE"],
         "time_to_first_accepted_pcm_seconds": first_pcm - playback_started,
         "capture_queue_peak": peak,
         "producer_termination": "interruption",
@@ -106,12 +106,12 @@ def test_system_audio_reaches_live_translation_before_playback_finishes() -> Non
         "live_exit_status": consumer_returncode,
         "live_result_latency_ms": [record["latency_ms"] for record in segments],
         "live_maximum_backlog_frames": terminal["maximum_backlog_frames"],
-        "operator_notes": os.environ["CARAWAY_CAPTURE_NOTES"],
+        "operator_notes": os.environ["CARAVAY_CAPTURE_NOTES"],
         "producer_stderr": producer_diagnostics,
         "consumer_stderr": consumer_diagnostics,
         "capture_start_to_playback_seconds": playback_started - capture_started,
     }
-    Path(os.environ["CARAWAY_CAPTURE_REPORT"]).write_text(
+    Path(os.environ["CARAVAY_CAPTURE_REPORT"]).write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     assert any(record.get("text") for record in early_segments)

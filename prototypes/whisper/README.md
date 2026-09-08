@@ -4,8 +4,8 @@ From the repository root:
 
 ```sh
 .venv/bin/python prototypes/whisper/run.py \
-  .scratch/caraway-offline-armenian-mvp/corpus/WncDNZDeWr0/WncDNZDeWr0_15m30s-20m30s.m4a \
-  --output .scratch/caraway-offline-armenian-mvp/results/whisper/large-v3-turbo.json
+  .scratch/caravay-offline-armenian-mvp/corpus/WncDNZDeWr0/WncDNZDeWr0_15m30s-20m30s.m4a \
+  --output .scratch/caravay-offline-armenian-mvp/results/whisper/large-v3-turbo.json
 ```
 
 The default is the unquantized `mlx-community/whisper-large-v3-turbo`
