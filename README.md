@@ -10,7 +10,7 @@ After the [first-time setup](#installation-and-first-run), start capture and
 translation from the repository root:
 
 ```console
-native/SystemAudioCapture/.build/release/caraway-capture \
+caravay-audio \
   | uv run caraway live --source hye --target eng --input-format f32le -
 ```
 
@@ -21,7 +21,7 @@ prints each translated segment as it becomes ready. Stop with `Ctrl-C`.
 To display the live translation and save it to a text file at the same time:
 
 ```console
-native/SystemAudioCapture/.build/release/caraway-capture \
+caravay-audio \
   | uv run caraway live --source hye --target eng --input-format f32le - \
   | tee translation.txt
 ```
@@ -82,8 +82,8 @@ translation:
 
 - Mac with Apple Silicon and macOS 14 or newer.
 - At least 20 GiB free for model installation; the model cache uses about 9 GiB.
-- Python 3.13, Apple's Command Line Tools with Swift 6.2+, and `ffmpeg`, installed
-  as described below.
+- Python 3.13 and `ffmpeg`; live system capture also needs
+  [Caravay Audio](https://github.com/tjvjk/caravay-audio).
 
 Tested on **MacBook Pro, M5 Max, 36 GB memory, macOS 26.6.2**.
 Other Apple Silicon Macs may work, but minimum memory and live-processing speed
@@ -96,14 +96,7 @@ Run these commands from the repository root on a Mac meeting the
 
 ### 1. Install prerequisites
 
-Install Apple's Command Line Tools, which include the Swift compiler:
-
-```console
-xcode-select --install
-```
-
-If they are already installed, continue. The full Xcode application is not
-required. Install Python and the other prerequisites with Homebrew:
+Install Python and the other prerequisites with Homebrew:
 
 ```console
 brew install uv python@3.13 ffmpeg
@@ -122,19 +115,20 @@ uv run caraway models status
 Status should be `ready`. If installation was interrupted or the cache is invalid,
 run the download command again.
 
-### 3. Build system-audio capture
+### 3. Install system-audio capture
+
+Install [Caravay Audio](https://github.com/tjvjk/caravay-audio) following its README.
+It is a separate Swift project with its own build, tests and installation.
+Confirm the command is on PATH:
 
 ```console
-swift build -c release --package-path native/SystemAudioCapture
+caravay-audio --version
 ```
-
-This produces the `caraway-capture` executable used in the
-[live translation command](#live-translation-of-system-audio).
 
 ### 4. Start live translation and allow capture
 
 Run the live translation command above. On the first launch, macOS asks for
-**Screen & System Audio Recording** permission. Approve `caraway-capture` (or its
+**Screen & System Audio Recording** permission. Approve `caravay-audio` (or its
 launching Terminal app) under **System Settings → Privacy & Security → Screen &
 System Audio Recording**. Restart Terminal if macOS requests it, then run the
 command again and play your audio.

@@ -30,13 +30,8 @@ REQUIRED = {
 def test_system_audio_reaches_live_translation_before_playback_finishes() -> None:
     """Record end-to-end reference-Mac evidence while playing a normal audio app."""
     root = Path(__file__).parents[1]
-    package = root / "native" / "SystemAudioCapture"
-    subprocess.run(
-        ("swift", "build", "-c", "release", "--package-path", str(package)),
-        check=True,
-    )
     producer = subprocess.Popen(
-        package / ".build" / "release" / "caraway-capture",
+        (os.environ.get("CARAVAY_AUDIO_COMMAND", "caravay-audio"), "--verbose"),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
