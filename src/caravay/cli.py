@@ -91,7 +91,12 @@ def parser() -> argparse.ArgumentParser:
     composed.add_argument("--artifact-hash-threshold", type=int, default=HASHES)
     streaming = commands.add_parser("live")
     streaming.add_argument("input")
-    streaming.add_argument("--input-format", required=True, choices=("f32le",))
+    streaming.add_argument(
+        "--input-format",
+        choices=("f32le",),
+        default="f32le",
+        help="input audio format (default: f32le)",
+    )
     streaming.add_argument(
         "--source", required=True, help="input language: " + ", ".join(LANGUAGES)
     )

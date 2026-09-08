@@ -11,7 +11,7 @@ translation from any directory:
 
 ```console
 caravay-audio \
-  | caravay live --source hye --target eng --input-format f32le -
+  | caravay live --source hye --target eng -
 ```
 
 This translates Armenian speech into English text. Play your meeting or video
@@ -22,7 +22,7 @@ To display the live translation and save it to a text file at the same time:
 
 ```console
 caravay-audio \
-  | caravay live --source hye --target eng --input-format f32le - \
+  | caravay live --source hye --target eng - \
   | tee translation.txt
 ```
 
