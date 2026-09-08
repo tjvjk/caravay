@@ -31,7 +31,7 @@ JSONL contains one JSON object per line, with segment outcomes and a final summa
 Live output also includes source sample positions and latency measurements:
 
 ```console
-native/SystemAudioCapture/.build/release/caraway-capture \
+caravay-audio \
   | uv run caraway live --source hye --target eng --input-format f32le --format jsonl - \
   > live.jsonl
 ```

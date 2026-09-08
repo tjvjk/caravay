@@ -12,10 +12,9 @@ supported configuration.
 
 Python must be `>=3.13,<3.14`; dependency versions are pinned in `uv.lock`.
 The pinned PyTorch 2.14.0 macOS wheel targets macOS 14+ on arm64. The capture
-executable targets macOS 13+, but that is not the minimum for the complete
-pipeline. Building it requires Swift 6.2+ and a compatible Command Line Tools
-installation, which may impose a newer host OS requirement. `ffmpeg` is used for
-audio-file decoding, not native system-audio capture.
+executable is maintained in [Caravay Audio](https://github.com/tjvjk/caravay-audio).
+Its Swift toolchain requirements and native checks live in that repository.
+`ffmpeg` is used for audio-file decoding, not native system-audio capture.
 
 The reference computer is MacBook Pro `Mac17,7`, M5 Max, 36 GB unified memory,
 macOS 26.6.2. Real-model file-processing and paced live-stream measurements exist
@@ -52,30 +51,13 @@ opt-in.
 
 ## Native system-audio capture
 
-The Swift producer uses Apple's ScreenCaptureKit directly. Check the installed
-toolchain if a build fails:
-
-```console
-swift --version
-xcrun --sdk macosx --show-sdk-version
-```
-
-Build with diagnostics and run the fast native-process tests:
-
-```console
-swift build --package-path native/SystemAudioCapture -Xswiftc -warnings-as-errors
-xcrun swift-format lint --recursive native/SystemAudioCapture/Sources \
-  native/SystemAudioCapture/Package.swift
-uv run pytest tests/test_system_audio_capture.py -q
-```
-
-Fast tests use a debug-only controlled capture adapter and never open the privacy
-prompt. A release build does not contain that adapter.
+Install `caravay-audio` separately and follow its repository's development checks.
+Caraway consumes its documented PCM stream and does not build native Swift code.
 
 ## Real system-audio acceptance
 
 This opt-in test opens ScreenCaptureKit, plays audio through `afplay`, and loads
-the production model. Set the six values and run:
+the production model. Install `caravay-audio` on PATH, then set the six values and run:
 
 ```console
 export CARAWAY_REAL_MODEL_CONFIG=/absolute/path/to/config.toml
@@ -87,6 +69,7 @@ export CARAWAY_CAPTURE_PERMISSION_STATE='granted before test'
 uv run pytest tests/test_system_audio_capture_acceptance.py -q
 ```
 
+To use a custom executable, set `CARAVAY_AUDIO_COMMAND` to its absolute path.
 The test explicitly selects Armenian input and English output. Use a known
 Eastern Armenian fixture and listen during playback to confirm that capture does
 not mute, reroute, or echo the source.
@@ -97,7 +80,7 @@ translation latency/backlog measurements.
 
 ## Live audio protocol
 
-`caraway-capture` writes only headerless little-endian Float32 mono PCM at 16 kHz
+`caravay-audio` writes only headerless little-endian Float32 mono PCM at 16 kHz
 to stdout. Permission, status, overload, and broken-pipe diagnostics go to stderr.
 Do not merge stderr into stdout. Capture includes the complete audible system mix
 and excludes the producer's own process audio.
