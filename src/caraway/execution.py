@@ -1,4 +1,4 @@
-"""Run the explicit composed Source Armenian speech-to-English pipeline."""
+"""Run the explicit composed speech-to-text translation pipeline."""
 
 from __future__ import annotations
 

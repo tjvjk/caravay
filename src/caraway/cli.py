@@ -11,7 +11,7 @@ from typing import cast
 from caraway import execution, live, transcription
 from caraway.artifacts import HASHES, threshold
 from caraway.models import DownloadError, DownloadLockError, download, inspect
-from caraway.settings import InvalidConfigError, Settings, load
+from caraway.settings import LANGUAGES, InvalidConfigError, Settings, load
 from caraway.translation import (
     FORMAT,
     Issue,
@@ -53,15 +53,21 @@ def parser() -> argparse.ArgumentParser:
     actions.add_parser("download")
     translation = commands.add_parser("translate")
     translation.add_argument("text", nargs="?", default=Input.STDIN)
-    translation.add_argument("--source", default="hye")
-    translation.add_argument("--target", default="eng")
+    translation.add_argument(
+        "--source", required=True, help="input language: " + ", ".join(LANGUAGES)
+    )
+    translation.add_argument(
+        "--target", required=True, help="output language: " + ", ".join(LANGUAGES)
+    )
     translation.add_argument("--backend")
     translation.add_argument("--format", choices=FORMAT, default="text")
     translation.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
     translation.add_argument("--verbose", action="store_true")
     speech = commands.add_parser("transcribe")
     speech.add_argument("audio")
-    speech.add_argument("--source", default="hye")
+    speech.add_argument(
+        "--source", required=True, help="input language: " + ", ".join(LANGUAGES)
+    )
     speech.add_argument("--backend")
     speech.add_argument("--format", choices=FORMAT, default="text")
     speech.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS)
@@ -69,8 +75,12 @@ def parser() -> argparse.ArgumentParser:
     speech.add_argument("--artifact-hash-threshold", type=int, default=HASHES)
     composed = commands.add_parser("run")
     composed.add_argument("audio")
-    composed.add_argument("--source", default="hye")
-    composed.add_argument("--target", default="eng")
+    composed.add_argument(
+        "--source", required=True, help="input language: " + ", ".join(LANGUAGES)
+    )
+    composed.add_argument(
+        "--target", required=True, help="output language: " + ", ".join(LANGUAGES)
+    )
     composed.add_argument("--route", choices=("composed", "fused"))
     composed.add_argument("--speech-backend", dest="speech", default="")
     composed.add_argument("--translation-backend", dest="translation", default="")
@@ -82,8 +92,12 @@ def parser() -> argparse.ArgumentParser:
     streaming = commands.add_parser("live")
     streaming.add_argument("input")
     streaming.add_argument("--input-format", required=True, choices=("f32le",))
-    streaming.add_argument("--source", default="hye")
-    streaming.add_argument("--target", default="eng")
+    streaming.add_argument(
+        "--source", required=True, help="input language: " + ", ".join(LANGUAGES)
+    )
+    streaming.add_argument(
+        "--target", required=True, help="output language: " + ", ".join(LANGUAGES)
+    )
     streaming.add_argument("--speech-backend", dest="speech", default="")
     streaming.add_argument("--translation-backend", dest="translation", default="")
     streaming.add_argument("--format", choices=FORMAT, default="text")
@@ -236,7 +250,7 @@ def transcribe(arguments: argparse.Namespace, config: Settings) -> int:
 
 
 def run(arguments: argparse.Namespace, config: Settings) -> int:
-    """Validate and execute the explicit composed speech-to-English plan."""
+    """Validate and execute the explicit composed speech-to-text translation plan."""
     try:
         prepared = execution.prepare(
             execution.Request(

@@ -1,206 +1,153 @@
 # Caraway
 
-Caraway is a development CLI for offline Source Armenian language processing on
-macOS. It explicitly downloads its pinned managed model, transcribes Source
-Armenian audio, and translates Source Armenian text to English without network
-access during processing.
+Caraway captures system audio on macOS and translates speech into text as you
+listen. Use it with meetings, browser videos, or any other playing audio. Once
+the model is downloaded, processing works offline.
 
-## Development setup
+## Live translation of system audio
 
-Install the locked Python 3.13 environment and run the command through `uv`:
+After the [first-time setup](#installation-and-first-run), start capture and
+translation from the repository root:
 
 ```console
-uv sync --python 3.13
-uv run caraway models download
-uv run caraway models status
+native/SystemAudioCapture/.build/release/caraway-capture \
+  | uv run caraway live --source hye --target eng --input-format f32le -
 ```
 
-Audio decoding requires `ffmpeg` on `PATH`.
+This translates Armenian speech into English text. Play your meeting or video
+normally: audio remains audible through the selected output device, and Caraway
+prints each translated segment as it becomes ready. Stop with `Ctrl-C`.
 
-## First-time macOS system-audio setup
+To display the live translation and save it to a text file at the same time:
 
-The system-audio producer is a small native Swift executable. It uses Apple's
-ScreenCaptureKit directly: no BlackHole, Loopback, virtual audio device, or other
-capture utility is required. The producer needs macOS 13 or newer.
+```console
+native/SystemAudioCapture/.build/release/caraway-capture \
+  | uv run caraway live --source hye --target eng --input-format f32le - \
+  | tee translation.txt
+```
 
-Install Apple's Command Line Tools once. They contain the Swift compiler, Swift
-Package Manager, macOS SDK, and `swift-format`:
+Capture includes the complete audible system mix, so other playing apps can also
+be translated. Microphone access and virtual audio devices are not required.
+
+Always choose both `--source` and `--target`; there are no default languages or
+automatic language detection. See [supported languages](#supported-languages).
+
+## Audio files
+
+Audio files can be processed much faster than real time: Caraway processes the
+recording without waiting for it to play. Actual speed depends on your Mac, the
+recording, and the selected languages; the first run also includes model loading.
+
+Translate speech from a local audio file and save the result:
+
+```console
+uv run caraway run --source kaz --target rus meeting.wav > translation.txt
+```
+
+For transcription in the original language, only `--source` is needed:
+
+```console
+uv run caraway transcribe --source kaz meeting.wav > transcript.txt
+```
+
+## Text translation
+
+Translate a UTF-8 file and save the result:
+
+```console
+uv run caraway translate --source hye --target eng armenian.txt > english.txt
+```
+
+Remove `> filename` from these examples to print the result in the terminal.
+`>` and `tee` overwrite an existing file; use `>>` or `tee -a` to append.
+See [usage.md](usage.md) for piped input and JSONL output with original transcripts.
+
+## Supported languages
+
+These languages are available for incoming audio and outgoing text, and for text
+translation:
+
+| Language | Code |
+| --- | --- |
+| Eastern Armenian (Yerevan) | `hye` |
+| Kazakh | `kaz` |
+| Russian | `rus` |
+| English | `eng` |
+| German | `deu` |
+| Turkish | `tur` |
+| French | `fra` |
+| Spanish | `spa` |
+
+## System requirements
+
+- Mac with Apple Silicon and macOS 14 or newer.
+- At least 20 GiB free for model installation; the model cache uses about 9 GiB.
+- Python 3.13, Apple's Command Line Tools with Swift 6.2+, and `ffmpeg`, installed
+  as described below.
+
+Tested on **MacBook Pro, M5 Max, 36 GB memory, macOS 26.6.2**.
+Other Apple Silicon Macs may work, but minimum memory and live-processing speed
+have not been verified on them.
+
+## Installation and first run
+
+Run these commands from the repository root on a Mac meeting the
+[system requirements](#system-requirements).
+
+### 1. Install prerequisites
+
+Install Apple's Command Line Tools, which include the Swift compiler:
 
 ```console
 xcode-select --install
-swift --version
-xcrun --sdk macosx --show-sdk-version
 ```
 
-If `xcode-select --install` says the tools are already installed, that is fine.
-You do not need the full Xcode application for this command-line package. Install
-the Python and audio prerequisites with Homebrew if they are not already present:
+If they are already installed, continue. The full Xcode application is not
+required. Install Python and the other prerequisites with Homebrew:
 
 ```console
 brew install uv python@3.13 ffmpeg
 uv sync --python 3.13
 ```
 
-`uv` creates the repository-local Python environment used by `caraway` and
-installs the locked dependencies. `ffmpeg` is needed by Caraway's finite-file
-audio commands; the native live-capture producer itself does not use it. Download
-the offline translation model once (this is the large, networked setup step):
+### 2. Download the model
+
+This is the large download needed before offline processing:
 
 ```console
 uv run caraway models download
 uv run caraway models status
 ```
 
-Build the Swift producer from the repository root:
+Status should be `ready`. If installation was interrupted or the cache is invalid,
+run the download command again.
+
+### 3. Build system-audio capture
 
 ```console
 swift build -c release --package-path native/SystemAudioCapture
 ```
 
-The executable is then at:
+This produces the `caraway-capture` executable used in the
+[live translation command](#live-translation-of-system-audio).
 
-```text
-native/SystemAudioCapture/.build/release/caraway-capture
-```
+### 4. Start live translation and allow capture
 
-On its first real launch, macOS asks for **Screen & System Audio Recording**
-permission. Approve `caraway-capture` (or the Terminal application that launched
-it) under **System Settings → Privacy & Security → Screen & System Audio
-Recording**. If macOS asks you to restart Terminal, do that and run the command
-again. The executable captures the complete audible system mix, excludes its own
-process audio, and never requests microphone access.
+Run the live translation command above. On the first launch, macOS asks for
+**Screen & System Audio Recording** permission. Approve `caraway-capture` (or its
+launching Terminal app) under **System Settings → Privacy & Security → Screen &
+System Audio Recording**. Restart Terminal if macOS requests it, then run the
+command again and play your audio.
 
-Start the complete live translation pipeline:
+## Help with startup
 
-```console
-native/SystemAudioCapture/.build/release/caraway-capture \
-  | uv run caraway live --input-format f32le -
-```
+- If recording permission is denied, enable it in macOS settings and restart
+  Terminal if asked.
+- If the model is missing or invalid, run `uv run caraway models download` again.
+- If processing reports `overload`, your Mac is not keeping up with live audio.
+  File processing may still work.
 
-Then play a meeting, browser video, or media file normally. Audio remains audible
-through the selected macOS output device while Caraway prints English lines. Stop
-with `Ctrl-C`. The producer drains PCM it has already accepted, closes the pipe,
-and exits with status 130; the downstream `caraway live` command sees normal EOF.
+Use `--help` for command options and `--verbose` for additional diagnostics.
 
-The pipe is intentionally binary on the left: `caraway-capture` writes only
-headerless little-endian Float32 mono PCM at 16 kHz to stdout. All permission,
-status, overload, and broken-pipe messages go to stderr. Do not redirect stderr
-into stdout (`2>&1`), because that would corrupt the PCM stream.
-
-For development, use the debug build and run the fast native-process tests:
-
-```console
-swift build --package-path native/SystemAudioCapture -Xswiftc -warnings-as-errors
-xcrun swift-format lint --recursive native/SystemAudioCapture/Sources \
-  native/SystemAudioCapture/Package.swift
-uv run pytest tests/test_system_audio_capture.py -q
-```
-
-Fast tests use a debug-only controlled capture adapter and never open the privacy
-prompt. A release build does not contain that adapter. If capture fails:
-
-- `permission_denied` means permission is absent; enable it in System Settings and
-  restart the launching terminal if requested;
-- `capture_unavailable` means ScreenCaptureKit could not supply a display;
-- `overload` means the consumer stopped draining fast enough; no PCM was silently
-  dropped;
-- `broken_pipe` means the downstream command closed its input.
-
-The real end-to-end acceptance is opt-in because it opens ScreenCaptureKit, plays
-audio through `afplay`, and loads the production model. Set the six values and run:
-
-```console
-export CARAWAY_REAL_MODEL_CONFIG=/absolute/path/to/config.toml
-export CARAWAY_REAL_AUDIO=/absolute/path/to/source-armenian.m4a
-export CARAWAY_CAPTURE_REPORT=/absolute/path/to/capture-report.json
-export CARAWAY_CAPTURE_NOTES='audible throughout; no echo or routing change'
-export CARAWAY_OUTPUT_DEVICE='name shown in System Settings > Sound'
-export CARAWAY_CAPTURE_PERMISSION_STATE='granted before test'
-uv run pytest tests/test_system_audio_capture_acceptance.py -q
-```
-
-The JSON report records the macOS version, named output device, permission state,
-time to first accepted PCM, capture queue peak, termination reason, and live
-translation latency/backlog measurements. Run this only with a known Source
-Armenian fixture and listen during playback to confirm that capture does not mute,
-reroute, or echo the source.
-
-The status command prints exactly one value:
-
-- `ready` with exit status `0` when the managed snapshot is usable;
-- `missing` with exit status `1` when it has not been installed; or
-- `invalid` with exit status `1` when its manifest or files are inconsistent.
-
-The default optional configuration file is:
-
-```text
-~/Library/Application Support/caraway/config.toml
-```
-
-Without that file, Caraway uses `~/Library/Caches/caraway` as its managed cache.
-To select another configuration file for one invocation, place `--config` before
-the command:
-
-```console
-uv run caraway --config /path/to/config.toml models status
-```
-
-A minimal configuration can change the managed cache location:
-
-```toml
-cache_dir = "~/Library/Caches/caraway"
-```
-
-Configuration errors leave stdout empty, write an `invalid_config` diagnostic to
-stderr, and exit with status `2`. Downloads use reusable temporary state, verify
-every published file, and safely replace invalid snapshots.
-
-Translate a UTF-8 file or piped text after downloading the model:
-
-```console
-uv run caraway translate armenian.txt
-printf 'Բարեւ' | uv run caraway translate -
-```
-
-Transcribe one local audio file into ordered Source Armenian text:
-
-```console
-uv run caraway transcribe armenian.wav
-uv run caraway transcribe --format jsonl armenian.m4a
-```
-
-Each completed audio segment is flushed to stdout as soon as it is ready.
-Speech commands reject generated `#err`/`#er` markers and hash runs of eight or
-more characters. Use `--artifact-hash-threshold` after `transcribe`, `run`, or
-`live` to tune the hash-run threshold from 2 through 256.
-
-Run the explicit composed speech-to-text and text-to-text plan to produce English
-while retaining Source Armenian transcripts in JSONL output:
-
-```console
-uv run caraway run armenian.wav
-uv run caraway run --format jsonl armenian.m4a
-```
-
-Translate live raw PCM from a paced producer without changing the finite-file
-commands:
-
-```console
-ffmpeg -re -i armenian.wav -f f32le -ac 1 -ar 16000 pipe:1 | uv run caraway live --input-format f32le -
-```
-
-Live input is little-endian Float32 mono PCM at 16 kHz. The defaults close speech
-after 600 ms of silence, cap a segment at 8 seconds, defer speech shorter than
-200 ms, and allow a 30-second bounded input backlog. The corresponding options
-can tune those timing bounds without changing language or backend routing. A full
-backlog is reported as `overload` and exits unsuccessfully; samples are never
-silently dropped. EOF finalizes remaining speech once and discards silence.
-
-Each text result is flushed as one English line. JSONL adds source sample positions,
-the Source Armenian transcript, end-to-end latency, maximum backlog, and a terminal
-reason (`clean_eof`, `interruption`, `overload`, or `failure`). SIGINT cancels the
-current work, preserves already emitted output, writes an interruption terminal
-record in JSONL mode, and exits with status 130. A broken input pipe is a failure.
-
-Backend diagnostics are hidden by default; pass `--verbose` after a processing
-command to inspect model-loading details.
+See [usage.md](usage.md) for configuration, output formats, and error details,
+or [development.md](development.md) for development and testing.

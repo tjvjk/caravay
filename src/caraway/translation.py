@@ -1,4 +1,4 @@
-"""Translate Source Armenian text with the pinned managed backend."""
+"""Translate supported text with the pinned managed backend."""
 
 import importlib
 import json
@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Final, Literal, NotRequired, Protocol, TextIO, TypedDict, cast
 
 from caraway.models import inspect
-from caraway.settings import Backend, Settings
+from caraway.settings import LANGUAGES, Backend, Settings
 
 Outcome = Literal["completed", "degraded", "skipped", "failed"]
 Format = Literal["text", "jsonl"]
@@ -127,7 +127,11 @@ def language(value: str) -> str:
 
 def capability(backend: str, source: str, target: str) -> Backend:
     """Validate the named backend's language-qualified text capability."""
-    if backend != Settings.backend_name or source != "hye" or target != "eng":
+    if (
+        backend != Settings.backend_name
+        or source not in LANGUAGES
+        or target not in LANGUAGES
+    ):
         raise ValidationError(
             f"unsupported_capability: {backend} cannot translate {source} to {target}"
         )
