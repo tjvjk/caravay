@@ -145,3 +145,16 @@ Use `--help` for command options and `--verbose` for additional diagnostics.
 
 See [usage.md](usage.md) for configuration, output formats, and error details,
 or [development.md](development.md) for development and testing.
+
+## License
+
+Caravay's source code is licensed under the [MIT License](LICENSE).
+Third-party dependencies and model files retain their own licenses.
+
+The separately downloaded
+[Meta SeamlessM4T v2 Large model](https://huggingface.co/facebook/seamless-m4t-v2-large)
+is licensed under
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/), which permits
+noncommercial use only. Caravay's MIT license does not grant commercial rights
+to this model. Commercial use with this model requires separate permission
+from its rights holder; otherwise, a model that permits commercial use is needed.
