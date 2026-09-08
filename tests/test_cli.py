@@ -17,6 +17,8 @@ from uuid import uuid4
 
 import pytest
 
+from caraway.cli import parser
+
 
 def invoke(
     home: Path,
@@ -332,9 +334,18 @@ class SeamlessM4Tv2ForTextToText:
             "CARAWAY_RUNTIME_FAIL_INDEX"
         ) == str(SeamlessM4Tv2ForTextToText.generated):
             raise RuntimeError("controlled inference failure")
-        if options.get("tgt_lang") not in ("eng", "hye"):
+        speech = "input_features" in options
+        expected = os.environ.get(
+            "CARAWAY_EXPECT_SOURCE" if speech else "CARAWAY_EXPECT_TARGET",
+            "hye" if speech else "eng",
+        )
+        if options.get("tgt_lang") != expected:
             raise RuntimeError("wrong target")
-        if options.get("tgt_lang") == "hye" and options.get("max_new_tokens") != 256:
+        if not speech and options.get("src_lang") != os.environ.get(
+            "CARAWAY_EXPECT_SOURCE", "hye"
+        ):
+            raise RuntimeError("wrong source")
+        if speech and options.get("max_new_tokens") != 256:
             raise RuntimeError("unbounded speech generation")
         SeamlessM4Tv2ForTextToText.generated += 1
         length = 257 if os.environ.get("CARAWAY_RUNTIME_LIMITED") == "1" else 1
@@ -390,7 +401,14 @@ def transcribe(
     cache = home / "Library" / "Caches" / "caraway"
     config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
     return invoke(
-        home, "--config", str(config), "transcribe", *arguments, additions=additions
+        home,
+        "--config",
+        str(config),
+        "transcribe",
+        "--source",
+        "hye",
+        *arguments,
+        additions=additions,
     )
 
 
@@ -404,7 +422,18 @@ def run(
     config = home / f"կարգավորում-{uuid4()}.toml"
     cache = home / "Library" / "Caches" / "caraway"
     config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
-    return invoke(home, "--config", str(config), "run", *arguments, additions=additions)
+    return invoke(
+        home,
+        "--config",
+        str(config),
+        "run",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
+        *arguments,
+        additions=additions,
+    )
 
 
 def live(
@@ -429,6 +458,10 @@ def live(
             "--config",
             config,
             "live",
+            "--source",
+            "hye",
+            "--target",
+            "eng",
             "--input-format",
             "f32le",
             *arguments,
@@ -518,6 +551,10 @@ def interact(
                 "--config",
                 config,
                 "live",
+                "--source",
+                "hye",
+                "--target",
+                "eng",
                 "--input-format",
                 "f32le",
                 *arguments,
@@ -680,7 +717,19 @@ def test_live_interrupt_reports_one_human_completion(tmp_path: Path) -> None:
     master, slave = attach(80)
     try:
         with subprocess.Popen(
-            (command, "--config", config, "live", "--input-format", "f32le", "-"),
+            (
+                command,
+                "--config",
+                config,
+                "live",
+                "--source",
+                "hye",
+                "--target",
+                "eng",
+                "--input-format",
+                "f32le",
+                "-",
+            ),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=slave,
@@ -727,7 +776,16 @@ def test_live_rejects_an_invalid_input_contract_before_model_loading(
     home = tmp_path / f"տուն-{uuid4()}"
     additions = runtime(tmp_path)
     additions["CARAWAY_RUNTIME_FAIL"] = "load"
-    result = invoke(home, "live", *arguments, additions=additions)
+    result = invoke(
+        home,
+        "live",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
+        *arguments,
+        additions=additions,
+    )
     assert (result.returncode, result.stdout) == (2, ""), (
         "invalid live input reached model loading"
     )
@@ -1366,7 +1424,7 @@ def test_run_validates_the_complete_plan_before_model_loading(tmp_path: Path) ->
     ("arguments", "operand"),
     (
         (("--source", "HYE"), "audio"),
-        (("--target", "fra"), "audio"),
+        (("--target", "ita"), "audio"),
         ((), "-"),
         ((), "https://օրինակ.test/ձայն.wav"),
         ((), "folder"),
@@ -1403,7 +1461,17 @@ def test_run_writes_deterministic_utf8_lf_output_bytes(tmp_path: Path) -> None:
         command = Path(sys.executable).with_name("caraway")
         results.append(
             subprocess.run(
-                (command, "--config", str(config), "run", str(source)),
+                (
+                    command,
+                    "--config",
+                    str(config),
+                    "run",
+                    "--source",
+                    "hye",
+                    "--target",
+                    "eng",
+                    str(source),
+                ),
                 capture_output=True,
                 check=False,
                 env=environment,
@@ -1451,7 +1519,17 @@ def test_run_rejects_a_configured_unsupported_fused_route(tmp_path: Path) -> Non
         '[commands.run]\nroute = "fused"\nbackend = "seamlessm4t-large-v2"\n',
         encoding="utf-8",
     )
-    result = invoke(home, "--config", str(config), "run", str(source))
+    result = invoke(
+        home,
+        "--config",
+        str(config),
+        "run",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
+        str(source),
+    )
     assert (result.returncode, result.stdout) == (2, ""), (
         "unsupported configured fused route was executed"
     )
@@ -1476,6 +1554,10 @@ def test_run_cli_route_overrides_the_configured_route_independently(
         "--config",
         str(config),
         "run",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
         "--route",
         "composed",
         str(source),
@@ -1496,6 +1578,10 @@ def test_run_real_model_produces_useful_english(tmp_path: Path) -> None:
         "--config",
         os.environ["CARAWAY_REAL_MODEL_CONFIG"],
         "run",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
         os.environ["CARAWAY_REAL_AUDIO"],
         network=False,
     )
@@ -1558,7 +1644,15 @@ def test_transcribe_flushes_each_completed_segment(tmp_path: Path) -> None:
     config.write_text(f'cache_dir = "{cache}"\n', encoding="utf-8")
     command = Path(sys.executable).with_name("caraway")
     with subprocess.Popen(
-        (command, "--config", str(config), "transcribe", str(source)),
+        (
+            command,
+            "--config",
+            str(config),
+            "transcribe",
+            "--source",
+            "hye",
+            str(source),
+        ),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=environment,
@@ -1836,7 +1930,7 @@ def test_transcribe_rejects_an_unsupported_capability(tmp_path: Path) -> None:
     result = transcribe(
         tmp_path / f"տուն-{uuid4()}",
         "--source",
-        "fra",
+        "ita",
         str(source),
     )
     assert (result.returncode, result.stdout) == (2, ""), (
@@ -1854,6 +1948,8 @@ def test_transcribe_real_model_produces_useful_source_armenian(tmp_path: Path) -
         "--config",
         os.environ["CARAWAY_REAL_MODEL_CONFIG"],
         "transcribe",
+        "--source",
+        "hye",
         os.environ["CARAWAY_REAL_AUDIO"],
         network=False,
     )
@@ -1867,7 +1963,16 @@ def test_translate_reads_source_armenian_from_a_file(tmp_path: Path) -> None:
     publish(home)
     source = tmp_path / f"աղբյուր-{uuid4()}.txt"
     source.write_text("Բարի լույս", encoding="utf-8")
-    result = invoke(home, "translate", str(source), additions=runtime(tmp_path))
+    result = invoke(
+        home,
+        "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
+        str(source),
+        additions=runtime(tmp_path),
+    )
     assert (result.returncode, result.stdout, result.stderr) == (
         0,
         "Good morning\n",
@@ -1881,6 +1986,10 @@ def test_translate_verbose_exposes_backend_diagnostics(tmp_path: Path) -> None:
     result = invoke(
         home,
         "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
         "--verbose",
         "-",
         additions=runtime(tmp_path),
@@ -1905,6 +2014,10 @@ def test_translate_reads_source_armenian_from_standard_input(tmp_path: Path) -> 
     result = invoke(
         home,
         "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
         "-",
         additions=runtime(tmp_path, "  Welcome home  "),
         stdin="Բարի գալուստ",
@@ -1924,7 +2037,7 @@ def test_translate_writes_utf8_with_a_physical_lf(tmp_path: Path) -> None:
     environment["HOME"] = str(home)
     command = Path(sys.executable).with_name("caraway")
     result = subprocess.run(
-        (command, "translate", "-"),
+        (command, "translate", "--source", "hye", "--target", "eng", "-"),
         input="Բարև".encode(),
         capture_output=True,
         check=False,
@@ -1944,6 +2057,10 @@ def test_translate_succeeds_with_network_access_denied(tmp_path: Path) -> None:
     result = invoke(
         home,
         "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
         "-",
         additions=runtime(tmp_path, "Offline result"),
         stdin="Անցանց",
@@ -1960,6 +2077,10 @@ def test_translate_omitted_operand_reads_noninteractive_input(tmp_path: Path) ->
     result = invoke(
         home,
         "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
         additions=runtime(tmp_path, "Hello"),
         stdin="Բարև",
     )
@@ -1974,7 +2095,9 @@ def test_translate_rejects_an_invalid_utf8_file_before_model_validation(
     home = tmp_path / f"տուն-{uuid4()}"
     source = tmp_path / f"աղբյուր-{uuid4()}.txt"
     source.write_bytes(b"\xff")
-    result = invoke(home, "translate", str(source))
+    result = invoke(
+        home, "translate", "--source", "hye", "--target", "eng", str(source)
+    )
     assert (result.returncode, result.stdout) == (2, ""), (
         "invalid UTF-8 input reached model validation"
     )
@@ -1986,7 +2109,7 @@ def test_translate_rejects_invalid_utf8_standard_input(tmp_path: Path) -> None:
     environment["HOME"] = str(home)
     command = Path(sys.executable).with_name("caraway")
     result = subprocess.run(
-        (command, "translate", "-"),
+        (command, "translate", "--source", "hye", "--target", "eng", "-"),
         input=b"\xff",
         capture_output=True,
         check=False,
@@ -2009,7 +2132,7 @@ def test_translate_omitted_operand_rejects_an_interactive_terminal(
     master, slave = pty.openpty()
     try:
         with subprocess.Popen(
-            (command, "translate"),
+            (command, "translate", "--source", "hye", "--target", "eng"),
             stdin=slave,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -2027,7 +2150,9 @@ def test_translate_omitted_operand_rejects_an_interactive_terminal(
 
 def test_translate_empty_text_skips_without_an_installed_model(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
-    result = invoke(home, "translate", "-", stdin="")
+    result = invoke(
+        home, "translate", "--source", "hye", "--target", "eng", "-", stdin=""
+    )
     assert (result.returncode, result.stdout) == (4, ""), (
         "empty translation attempted backend setup"
     )
@@ -2035,7 +2160,18 @@ def test_translate_empty_text_skips_without_an_installed_model(tmp_path: Path) -
 
 def test_translate_empty_jsonl_has_only_a_zero_count_summary(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
-    result = invoke(home, "translate", "--format", "jsonl", "-", stdin="")
+    result = invoke(
+        home,
+        "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
+        "--format",
+        "jsonl",
+        "-",
+        stdin="",
+    )
     records = tuple(json.loads(line) for line in result.stdout.splitlines())
     assert (
         result.returncode,
@@ -2053,7 +2189,18 @@ def test_translate_empty_jsonl_has_only_a_zero_count_summary(tmp_path: Path) -> 
 @pytest.mark.parametrize("value", ("HY", "hye ", "hyե", "HYE"))
 def test_translate_rejects_malformed_language_codes(tmp_path: Path, value: str) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
-    result = invoke(home, "translate", "--source", value, "-", stdin="Բարև")
+    result = invoke(
+        home,
+        "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
+        "--source",
+        value,
+        "-",
+        stdin="Բարև",
+    )
     assert (result.returncode, result.stdout, "invalid_language" in result.stderr) == (
         2,
         "",
@@ -2063,7 +2210,18 @@ def test_translate_rejects_malformed_language_codes(tmp_path: Path, value: str) 
 
 def test_translate_distinguishes_an_unsupported_capability(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
-    result = invoke(home, "translate", "--target", "fra", "-", stdin="Բարև")
+    result = invoke(
+        home,
+        "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
+        "--target",
+        "ita",
+        "-",
+        stdin="Բարև",
+    )
     assert (
         result.returncode,
         result.stdout,
@@ -2077,7 +2235,9 @@ def test_translate_distinguishes_an_unsupported_capability(tmp_path: Path) -> No
 
 def test_translate_reports_a_missing_snapshot_before_mps(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
-    result = invoke(home, "translate", "-", stdin="Բարև")
+    result = invoke(
+        home, "translate", "--source", "hye", "--target", "eng", "-", stdin="Բարև"
+    )
     assert (
         result.returncode,
         result.stdout,
@@ -2092,7 +2252,9 @@ def test_translate_reports_a_missing_snapshot_before_mps(tmp_path: Path) -> None
 def test_translate_rejects_an_invalid_snapshot_before_mps(tmp_path: Path) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
     publish(home).write_text("չվավեր", encoding="utf-8")
-    result = invoke(home, "translate", "-", stdin="Բարև")
+    result = invoke(
+        home, "translate", "--source", "hye", "--target", "eng", "-", stdin="Բարև"
+    )
     assert (
         result.returncode,
         result.stdout,
@@ -2111,7 +2273,17 @@ def test_translate_reports_unavailable_mps_without_loading_transformers(
     publish(home)
     additions = runtime(tmp_path)
     additions["CARAWAY_MPS"] = "0"
-    result = invoke(home, "translate", "-", additions=additions, stdin="Բարև")
+    result = invoke(
+        home,
+        "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
+        "-",
+        additions=additions,
+        stdin="Բարև",
+    )
     assert (result.returncode, result.stdout, "mps_unavailable" in result.stderr) == (
         2,
         "",
@@ -2125,6 +2297,10 @@ def test_translate_emits_schema_version_one_jsonl(tmp_path: Path) -> None:
     result = invoke(
         home,
         "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
         "--format",
         "jsonl",
         "-",
@@ -2169,6 +2345,10 @@ def test_translate_marks_repeating_output_as_degraded(tmp_path: Path) -> None:
     result = invoke(
         home,
         "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
         "--format",
         "jsonl",
         "-",
@@ -2197,6 +2377,10 @@ def test_translate_serializes_a_processing_failure(tmp_path: Path) -> None:
     result = invoke(
         home,
         "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
         "--format",
         "jsonl",
         "-",
@@ -2225,6 +2409,10 @@ def test_translate_real_model_produces_useful_english(tmp_path: Path) -> None:
         "--config",
         os.environ["CARAWAY_REAL_MODEL_CONFIG"],
         "translate",
+        "--source",
+        "hye",
+        "--target",
+        "eng",
         "-",
         stdin="Բարև",
     )
@@ -2677,3 +2865,74 @@ def test_models_download_restores_an_invalid_snapshot_after_publish_failure(
         "",
         "չվավեր",
     ), "failed publication did not restore the invalid snapshot"
+
+
+@pytest.mark.parametrize(
+    "source", ("hye", "kaz", "rus", "eng", "deu", "tur", "fra", "spa")
+)
+@pytest.mark.parametrize(
+    "target", ("hye", "kaz", "rus", "eng", "deu", "tur", "fra", "spa")
+)
+@pytest.mark.parametrize("command", ("run", "live"))
+def test_audio_commands_preserve_explicit_languages_through_both_stages(
+    tmp_path: Path, source: str, target: str, command: str
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    transcript = f"Сәлем {uuid4()}"
+    output = f"Բարեւ {uuid4()}"
+    additions = speech(tmp_path, (transcript, output))
+    additions["CARAWAY_EXPECT_SOURCE"] = source
+    additions["CARAWAY_EXPECT_TARGET"] = target
+    arguments = ("--source", source, "--target", target, "--format", "jsonl")
+    result = (
+        run(home, *arguments, str(audio(tmp_path, 1)), additions=additions)
+        if command == "run"
+        else live(home, (0.2,) * 3_200, *arguments, additions=additions)
+    )
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (
+        result.returncode,
+        records[0]["text"],
+        records[0]["source_transcript"],
+        records[-1]["source_language"],
+        records[-1]["target_language"],
+    ) == (0, output, transcript, source, target), (
+        "audio processing lost the explicit language selection or generated text"
+    )
+
+
+@pytest.mark.parametrize(
+    "source", ("hye", "kaz", "rus", "eng", "deu", "tur", "fra", "spa")
+)
+def test_transcribe_passes_each_selected_language_to_recognition(
+    tmp_path: Path, source: str
+) -> None:
+    home = tmp_path / f"տուն-{uuid4()}"
+    publish(home)
+    output = f"Сәлем {uuid4()}"
+    additions = speech(tmp_path, (output,))
+    additions["CARAWAY_EXPECT_SOURCE"] = source
+    result = transcribe(
+        home, "--source", source, str(audio(tmp_path, 1)), additions=additions
+    )
+    assert (result.returncode, result.stdout) == (0, output + "\n"), (
+        "recognition did not use the selected source language"
+    )
+
+
+@pytest.mark.parametrize("command", ("run", "live", "translate"))
+@pytest.mark.parametrize("arguments", ((), ("--source", "kaz"), ("--target", "rus")))
+def test_translation_commands_require_both_languages(
+    command: str, arguments: tuple[str, ...]
+) -> None:
+    options = ("--input-format", "f32le") if command == "live" else ()
+    with pytest.raises(SystemExit) as failure:
+        parser().parse_args((command, *options, *arguments, f"дыбыс-{uuid4()}"))
+    assert failure.value.code == 2, "incomplete language selection was accepted"
+
+
+def test_transcribe_requires_an_explicit_source_language() -> None:
+    with pytest.raises(SystemExit) as failure:
+        parser().parse_args(("transcribe", f"дыбыс-{uuid4()}"))
+    assert failure.value.code == 2, "recognition selected a source language implicitly"

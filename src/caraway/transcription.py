@@ -1,4 +1,4 @@
-"""Transcribe local Source Armenian audio through the managed backend."""
+"""Transcribe local audio in supported languages through the managed backend."""
 
 import importlib
 import json
@@ -20,7 +20,7 @@ from typing import (
 from caraway.artifacts import HASHES, remove, useful
 from caraway.models import inspect
 from caraway.repetition import trim
-from caraway.settings import Backend, Settings
+from caraway.settings import LANGUAGES, Backend, Settings
 from caraway.translation import Format, Outcome, ValidationError
 
 Stage = Literal["speech_to_text"]
@@ -146,8 +146,8 @@ def read(value: str) -> Path:
 
 
 def capability(backend: str, source: str) -> Backend:
-    """Validate the backend's Source Armenian speech capability."""
-    if backend != Settings.backend_name or source != "hye":
+    """Validate the backend's language-qualified speech capability."""
+    if backend != Settings.backend_name or source not in LANGUAGES:
         raise ValidationError(
             f"unsupported_capability: {backend} cannot transcribe {source}"
         )
