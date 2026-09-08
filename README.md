@@ -77,6 +77,8 @@ translation:
 | Turkish | `tur` |
 | French | `fra` |
 | Spanish | `spa` |
+| Mandarin Chinese (Simplified) | `cmn` |
+| Mandarin Chinese (Traditional) | `cmn_Hant` |
 
 ## System requirements
 

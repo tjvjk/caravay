@@ -47,7 +47,7 @@ uv run mypy --strict src tests
 uv run pytest
 ```
 
-Automated tests verify all 64 combinations of the eight supported languages
+Automated tests verify all 100 combinations of the ten supported language codes
 through file and live processing, using controlled model outputs. They verify
 language routing, not recognition or translation quality. Real-model tests are
 opt-in.

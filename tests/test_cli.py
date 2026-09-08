@@ -1914,7 +1914,9 @@ def test_transcribe_model_load_failure_attempts_no_jsonl_segments(
     ), "model load failure fabricated an attempted segment"
 
 
-@pytest.mark.parametrize("value", ("HY", "hye ", "hyե", "HYE"))
+@pytest.mark.parametrize(
+    "value", ("HY", "hye ", "hyե", "HYE", "cmn_hant", "CMN", "cmn_Hans", "eng_Hant")
+)
 def test_transcribe_rejects_malformed_language_codes(
     tmp_path: Path, value: str
 ) -> None:
@@ -2186,7 +2188,9 @@ def test_translate_empty_jsonl_has_only_a_zero_count_summary(tmp_path: Path) -> 
     ), "empty translation emitted an invalid JSONL summary"
 
 
-@pytest.mark.parametrize("value", ("HY", "hye ", "hyե", "HYE"))
+@pytest.mark.parametrize(
+    "value", ("HY", "hye ", "hyե", "HYE", "cmn_hant", "CMN", "cmn_Hans", "eng_Hant")
+)
 def test_translate_rejects_malformed_language_codes(tmp_path: Path, value: str) -> None:
     home = tmp_path / f"տուն-{uuid4()}"
     result = invoke(
@@ -2868,10 +2872,12 @@ def test_models_download_restores_an_invalid_snapshot_after_publish_failure(
 
 
 @pytest.mark.parametrize(
-    "source", ("hye", "kaz", "rus", "eng", "deu", "tur", "fra", "spa")
+    "source",
+    ("hye", "kaz", "rus", "eng", "deu", "tur", "fra", "spa", "cmn", "cmn_Hant"),
 )
 @pytest.mark.parametrize(
-    "target", ("hye", "kaz", "rus", "eng", "deu", "tur", "fra", "spa")
+    "target",
+    ("hye", "kaz", "rus", "eng", "deu", "tur", "fra", "spa", "cmn", "cmn_Hant"),
 )
 @pytest.mark.parametrize("command", ("run", "live"))
 def test_audio_commands_preserve_explicit_languages_through_both_stages(
@@ -2903,7 +2909,8 @@ def test_audio_commands_preserve_explicit_languages_through_both_stages(
 
 
 @pytest.mark.parametrize(
-    "source", ("hye", "kaz", "rus", "eng", "deu", "tur", "fra", "spa")
+    "source",
+    ("hye", "kaz", "rus", "eng", "deu", "tur", "fra", "spa", "cmn", "cmn_Hant"),
 )
 def test_transcribe_passes_each_selected_language_to_recognition(
     tmp_path: Path, source: str
@@ -2936,3 +2943,40 @@ def test_transcribe_requires_an_explicit_source_language() -> None:
     with pytest.raises(SystemExit) as failure:
         parser().parse_args(("transcribe", f"дыбыс-{uuid4()}"))
     assert failure.value.code == 2, "recognition selected a source language implicitly"
+
+
+@pytest.mark.parametrize(
+    "source,target",
+    (("cmn", "eng"), ("eng", "cmn"), ("cmn_Hant", "eng"), ("eng", "cmn_Hant")),
+)
+def test_translate_preserves_chinese_language_selection(
+    tmp_path: Path, source: str, target: str
+) -> None:
+    home = tmp_path / f"家-{uuid4()}"
+    publish(home)
+    output = f"你好世界 {uuid4()}"
+    additions = speech(tmp_path, (output,))
+    additions["CARAVAY_EXPECT_SOURCE"] = source
+    additions["CARAVAY_EXPECT_TARGET"] = target
+    result = invoke(
+        home,
+        "translate",
+        "--source",
+        source,
+        "--target",
+        target,
+        "--format",
+        "jsonl",
+        "-",
+        stdin=f"歡迎 {uuid4()}",
+        additions=additions,
+    )
+    records = tuple(json.loads(line) for line in result.stdout.splitlines())
+    assert (
+        result.returncode,
+        records[0]["text"],
+        records[-1]["source_language"],
+        records[-1]["target_language"],
+    ) == (0, output, source, target), (
+        "translation lost the Chinese language selection or text"
+    )
