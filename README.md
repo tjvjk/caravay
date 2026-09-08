@@ -7,7 +7,7 @@ the model is downloaded, processing works offline.
 
 https://github.com/user-attachments/assets/29b18734-c232-421c-ad80-2cc18e2be400
 
-Caravay live translation demo
+Caravay live translation demo: Chinese to English
 
 ## Live translation of system audio
 
