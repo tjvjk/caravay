@@ -462,8 +462,6 @@ def live(
             "hye",
             "--target",
             "eng",
-            "--input-format",
-            "f32le",
             *arguments,
             "-",
         ),

@@ -85,6 +85,7 @@ translation latency/backlog measurements.
 
 `caravay-audio` writes only headerless little-endian Float32 mono PCM at 16 kHz
 to stdout. Permission, status, overload, and broken-pipe diagnostics go to stderr.
+The `live` command defaults to this format (`--input-format f32le`).
 Do not merge stderr into stdout. Capture includes the complete audible system mix
 and excludes the producer's own process audio.
 
@@ -92,7 +93,7 @@ To exercise live processing with a paced file producer:
 
 ```console
 ffmpeg -re -i armenian.wav -f f32le -ac 1 -ar 16000 pipe:1 \
-  | uv run caravay live --source hye --target eng --input-format f32le -
+  | uv run caravay live --source hye --target eng -
 ```
 
 Default segmentation closes speech after 600 ms of silence, caps a segment at
