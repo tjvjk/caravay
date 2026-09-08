@@ -4,6 +4,9 @@ See [README.md](README.md) for use cases, prerequisites, model installation, and
 first-time macOS recording permissions. Run commands here from the repository
 root.
 
+See [Homebrew distribution](docs/homebrew.md) for release packaging and formula
+validation.
+
 ## Compatibility and validation
 
 The runtime uses MPS with FP16 and requires Apple Metal acceleration. It does not

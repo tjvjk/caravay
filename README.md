@@ -7,11 +7,11 @@ the model is downloaded, processing works offline.
 ## Live translation of system audio
 
 After the [first-time setup](#installation-and-first-run), start capture and
-translation from the repository root:
+translation from any directory:
 
 ```console
 caravay-audio \
-  | uv run caravay live --source hye --target eng --input-format f32le -
+  | caravay live --source hye --target eng --input-format f32le -
 ```
 
 This translates Armenian speech into English text. Play your meeting or video
@@ -22,7 +22,7 @@ To display the live translation and save it to a text file at the same time:
 
 ```console
 caravay-audio \
-  | uv run caravay live --source hye --target eng --input-format f32le - \
+  | caravay live --source hye --target eng --input-format f32le - \
   | tee translation.txt
 ```
 
@@ -41,13 +41,13 @@ recording, and the selected languages; the first run also includes model loading
 Translate speech from a local audio file and save the result:
 
 ```console
-uv run caravay run --source kaz --target rus meeting.wav > translation.txt
+caravay run --source kaz --target rus meeting.wav > translation.txt
 ```
 
 For transcription in the original language, only `--source` is needed:
 
 ```console
-uv run caravay transcribe --source kaz meeting.wav > transcript.txt
+caravay transcribe --source kaz meeting.wav > transcript.txt
 ```
 
 ## Text translation
@@ -55,7 +55,7 @@ uv run caravay transcribe --source kaz meeting.wav > transcript.txt
 Translate a UTF-8 file and save the result:
 
 ```console
-uv run caravay translate --source hye --target eng armenian.txt > english.txt
+caravay translate --source hye --target eng armenian.txt > english.txt
 ```
 
 Remove `> filename` from these examples to print the result in the terminal.
@@ -91,16 +91,16 @@ have not been verified on them.
 
 ## Installation and first run
 
-Run these commands from the repository root on a Mac meeting the
+Run these commands on a Mac meeting the
 [system requirements](#system-requirements).
 
-### 1. Install prerequisites
+### 1. Install Caravay
 
-Install Python and the other prerequisites with Homebrew:
+Install with Homebrew. Python 3.13, `ffmpeg`, and Python dependencies are installed
+automatically; no repository checkout, `uv`, or environment activation is needed:
 
 ```console
-brew install uv python@3.13 ffmpeg
-uv sync --python 3.13
+brew install tjvjk/tap/caravay
 ```
 
 ### 2. Download the model
@@ -108,8 +108,8 @@ uv sync --python 3.13
 This is the large download needed before offline processing:
 
 ```console
-uv run caravay models download
-uv run caravay models status
+caravay models download
+caravay models status
 ```
 
 Status should be `ready`. If installation was interrupted or the cache is invalid,
@@ -117,11 +117,10 @@ run the download command again.
 
 ### 3. Install system-audio capture
 
-Install [Caravay Audio](https://github.com/tjvjk/caravay-audio) following its README.
-It is a separate Swift project with its own build, tests and installation.
-Confirm the command is on PATH:
+Install [Caravay Audio](https://github.com/tjvjk/caravay-audio) for live capture:
 
 ```console
+brew install tjvjk/tap/caravay-audio
 caravay-audio --version
 ```
 
@@ -137,7 +136,7 @@ command again and play your audio.
 
 - If recording permission is denied, enable it in macOS settings and restart
   Terminal if asked.
-- If the model is missing or invalid, run `uv run caravay models download` again.
+- If the model is missing or invalid, run `caravay models download` again.
 - If processing reports `overload`, your Mac is not keeping up with live audio.
   File processing may still work.
 
